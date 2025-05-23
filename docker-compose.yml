@@ -1,0 +1,18 @@
+services:
+  zackgpt:
+    build: .
+    volumes:
+      - .:/app
+    command: ["python", "main.py"]
+    environment:
+      - USE_ELEVENLABS=True
+      - USE_WHISPER=True
+      - DEBUG_MODE=False
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
+    env_file:
+      - .env
+    devices:
+      - "/dev/snd:/dev/snd"  # Mic access (Linux only)
+    stdin_open: true
+    tty: true

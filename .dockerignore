@@ -1,0 +1,64 @@
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.pdb
+*.so
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+
+# Environment and secret files
+.env
+.env.*
+
+# OS-specific clutter
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Whisper/audio/temp files
+*.wav
+*.mp3
+*.flac
+*.m4a
+*.tmp
+*.cache
+*.bak
+*.swp
+*~
+
+# Hugging Face / OpenAI cache
+~/.cache/
+~/.cache/whisper/
+~/.cache/huggingface/
+
+# LLM/vector/data artifacts
+embeddings/
+data/
+logs/
+memory/
+memory_log.jsonl
+*.jsonl
+output.mp3
+
+# Editor & project files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# Project-specific excluded folders
+/profiles/
+/models/
+/memory_web/
+/voice/tmp/
+/logs/output.txt

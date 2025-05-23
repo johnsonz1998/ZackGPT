@@ -1,0 +1,23 @@
+# === Core ===
+openai==1.14.2
+requests==2.31.0
+python-dotenv==1.0.1
+tqdm==4.66.2
+
+# === Whisper & Audio ===
+whisper==1.1.10
+faster-whisper==0.10.0
+sounddevice==0.4.6
+scipy==1.12.0
+psutil==5.9.8
+
+# === LLM / Retrieval ===
+llama-index==0.10.32
+faiss-cpu==1.8.0
+numpy==1.26.4
+webrtcvad==2.0.10
+
+
+# === Optional Dev Tools ===
+# rich==13.7.0
+# watchdog==4.0.0
