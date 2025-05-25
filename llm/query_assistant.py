@@ -1,16 +1,25 @@
 # llm/query_assistant.py
 
+import logging
 import config
 from openai import OpenAI
+from llama_index.storage.storage_context import StorageContext
+from llama_index.indices.vector_store import load_index_from_storage
+from llama_index.llms import OpenAI as LlamaOpenAI
+from llama_index import ServiceContext
+
 log_debug = logging.getLogger("zackgpt").debug
 
 client = OpenAI(api_key=config.OPENAI_API_KEY)
+llama_llm = LlamaOpenAI(api_key=config.OPENAI_API_KEY)
+service_context = ServiceContext.from_defaults(llm=llama_llm)
+
 
 def load_index():
     """Load a previously saved vector index from disk."""
     try:
         storage_context = StorageContext.from_defaults(persist_dir="data/index")
-        index = load_index_from_storage(storage_context)
+        index = load_index_from_storage(storage_context, service_context=service_context)
         log_debug("Vector index loaded successfully.")
         return index
     except Exception as e:

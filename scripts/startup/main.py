@@ -1,5 +1,7 @@
 import signal
 import config
+import sys
+import os
 from voice.whisper_listener import listen_until_silence, reload_whisper_model
 from llm.query_assistant import load_index, ask_gpt
 from llm.context_engine import analyze_context
@@ -8,6 +10,7 @@ from voice.elevenlabs import speak as eleven_speak
 from voice.tts_mac import speak as mac_speak
 from app.memory_engine import save_memory, get_context_block
 from llm.prompt_builder import build_prompt
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
 def get_speaker():
     return eleven_speak if config.USE_ELEVENLABS else mac_speak

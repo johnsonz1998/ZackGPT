@@ -112,7 +112,7 @@ function run_docker() {
 
 
   echo -e "\033[1;36m[+] Building Docker image...\033[0m"
-  if ! docker build -t zackgpt .; then
+  if ! docker build --no-cache -t zackgpt .; then
     echo -e "\033[1;31m[!] Docker build failed. Aborting.\033[0m"
     exit 1
   fi
@@ -121,6 +121,7 @@ function run_docker() {
   docker run -it --rm \
     --env-file .env \
     -v "$(pwd)":/app \
+    -e PYTHONPATH=/app \
     zackgpt python $script
 }
 
