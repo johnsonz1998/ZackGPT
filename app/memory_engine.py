@@ -35,18 +35,27 @@ def save_chat_line(question, answer):
         f.write(json.dumps(entry) + "\n")
 
 def save_memory_entry(entry: dict):
+    from datetime import datetime
+    import uuid
+
+    # Use ID or generate a timestamp-based filename
     memory_id = entry.get("id") or datetime.now().isoformat().replace(":", "-")
-    path = MEMORY_DIR / f"{memory_id}.json"
+    filename = f"{memory_id}.json"
+    path = MEMORY_DIR / filename
 
-    with open(path, "w") as f:
-        json.dump(entry, f, indent=2)
+    try:
+        with open(path, "w") as f:
+            json.dump(entry, f, indent=2)
 
-    if config.DEBUG_MODE:
-        log_debug(f"Memory saved: {entry.get('answer', '')[:60]}...")
-    elif config.MEMORY_MODE == "all":
-        print("[Memory updated]")
-    elif config.MEMORY_MODE == "ai":
-        print("[Memory updated by AI]")
+        if config.DEBUG_MODE:
+            print(f"✅ Memory saved to {path}")
+        elif config.MEMORY_MODE == "all":
+            print("[Memory updated]")
+        elif config.MEMORY_MODE == "ai":
+            print("[Memory updated by AI]")
+
+    except Exception as e:
+        log_error(f"Failed to save memory entry to {path}: {e}")
 
 def save_memory(
     question,

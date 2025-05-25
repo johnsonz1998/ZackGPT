@@ -42,8 +42,8 @@ def should_save_memory(question: str, answer: str) -> dict:
                 {
                     "role": "system",
                     "content": (
-                        "If the exchange below contains information worth remembering, "
-                        "respond with: { \"remember\": true, \"memory\": { <full memory object> } }. "
+                        "If the exchange below contains information worth remembering, respond with:\n"
+                        "{\n  \"remember\": true,\n  \"memory\": {\n    \"question\": string,\n    \"answer\": string,\n    \"tags\": list,\n    \"importance\": string,\n    \"context\": string,\n    \"source\": \"user\",\n    \"agents\": [\"core_assistant\"]\n  }\n}\n"
                         "Otherwise, respond with: { \"remember\": false }"
                     )
                 },
@@ -64,8 +64,13 @@ def should_save_memory(question: str, answer: str) -> dict:
             print("\n[AI Memory Decision Parsed JSON]:")
             print(json.dumps(parsed, indent=2))
 
-        if parsed.get("remember") is True and "memory" in parsed:
-            return parsed["memory"]
+        memory = parsed.get("memory")
+        if parsed.get("remember") is True and memory:
+            required_keys = ["question", "answer", "tags", "context", "importance", "source", "agents"]
+            if all(k in memory for k in required_keys):
+                return memory
+            else:
+                print("⚠️ Skipping malformed memory:", memory)
         return None
 
     except Exception as e:
