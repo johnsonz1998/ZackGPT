@@ -10,8 +10,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsndfile1 \
     libportaudio2 \
     build-essential \
-    python3-dev \
-    git && \
+    git \
+    python3.10-dev \
+    libpython3.10-dev && \
     rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies

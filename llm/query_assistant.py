@@ -3,10 +3,11 @@
 import logging
 import config
 from openai import OpenAI
-from llama_index.storage.storage_context import StorageContext
-from llama_index.indices.vector_store import load_index_from_storage
+from llama_index.core.storage.storage_context import StorageContext
+from llama_index.core import load_index_from_storage
 from llama_index.llms import OpenAI as LlamaOpenAI
 from llama_index import ServiceContext
+
 
 log_debug = logging.getLogger("zackgpt").debug
 
