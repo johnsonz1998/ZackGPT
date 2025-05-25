@@ -23,7 +23,7 @@ class RestartHandler(FileSystemEventHandler):
         self.process.kill()
 
 if __name__ == "__main__":
-    cmd = ["python", "scripts/main.py"]
+    cmd = ["python", "-m", "scripts.startup.main"]
     event_handler = RestartHandler(cmd, watch_path="scripts")
     observer = Observer()
     observer.schedule(event_handler, path="scripts", recursive=True)

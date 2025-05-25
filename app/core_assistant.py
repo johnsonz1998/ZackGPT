@@ -1,13 +1,11 @@
 import json
 import re
 from app.prompt_loader import load_prompt
-from app.memory_engine import load_memory_by_tags, get_context_block
+from app.memory_engine import load_memory_by_tags, get_context_block, save_memory, conversation_history
 from openai import OpenAI
 import config
 
 client = OpenAI(api_key=config.OPENAI_API_KEY)
-
-conversation_history = []
 
 def summarize_memory_for_context(mem_entries, max_items=5):
     summary = []
@@ -15,15 +13,17 @@ def summarize_memory_for_context(mem_entries, max_items=5):
         summary.append(f"- {entry['answer']} (tags: {', '.join(entry.get('tags', []))})")
     return "\n".join(summary)
 
+def get_recent_conversation(n=5):
+    return "\n\n".join(
+        f"You: {msg['content']}" if msg['role'] == "user" else f"Assistant: {msg['content']}"
+        for msg in conversation_history[-2 * n:]
+    )
+
 def build_context(user_input: str, agent: str = "core_assistant") -> list:
-    # Long-term memory retrieved by tags
     long_term_memory = load_memory_by_tags(user_input, agent)
     memory_context = summarize_memory_for_context(long_term_memory)
-
-    # Short-term memory from recent messages
     short_term = get_context_block(config.MAX_CONTEXT_HISTORY)
 
-    # Build dynamic system prompt
     system_prompt = load_prompt(agent, {
         "MEMORY_CONTEXT": memory_context,
         "SHORT_TERM": short_term
@@ -34,7 +34,47 @@ def build_context(user_input: str, agent: str = "core_assistant") -> list:
     context.append({"role": "user", "content": user_input})
     return context
 
-def run_assistant(user_input: str, agent: str = "core_assistant"):
+def should_save_memory(question: str, answer: str) -> dict:
+    try:
+        result = client.chat.completions.create(
+            model="gpt-4-turbo",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "If the exchange below contains information worth remembering, "
+                        "respond with: { \"remember\": true, \"memory\": { <full memory object> } }. "
+                        "Otherwise, respond with: { \"remember\": false }"
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": f"Question: {question}\nAnswer: {answer}"
+                }
+            ],
+            temperature=0.2
+        )
+
+        content = result.choices[0].message.content.strip()
+        print("\n🧠 RAW MEMORY DECISION STRING:\n", content)
+
+        parsed = json.loads(content)
+
+        if config.DEBUG_MODE:
+            print("\n[AI Memory Decision Parsed JSON]:")
+            print(json.dumps(parsed, indent=2))
+
+        if parsed.get("remember") is True and "memory" in parsed:
+            return parsed["memory"]
+        return None
+
+    except Exception as e:
+        import traceback
+        print("⚠️ Memory decision failed:")
+        traceback.print_exc()
+        return None
+
+def run_assistant(*, user_input: str, agent: str = "core_assistant"):
     if not user_input.strip():
         print("⚠️ Empty transcription. Ignoring.")
         return
@@ -45,7 +85,7 @@ def run_assistant(user_input: str, agent: str = "core_assistant"):
         response = client.chat.completions.create(
             model="gpt-4-turbo",
             messages=messages,
-            temperature=0.7,
+            temperature=config.LLM_TEMPERATURE,
             stream=False
         )
     except Exception as e:
@@ -55,16 +95,30 @@ def run_assistant(user_input: str, agent: str = "core_assistant"):
     content = response.choices[0].message.content
     print("\n🧠 Full GPT response:\n", content)
 
-    handle_gpt_response(content, user_input=user_input)
+    conversation_history.append({"role": "user", "content": user_input})
+    conversation_history.append({"role": "assistant", "content": content})
 
-def get_response(user_input: str, agent: str = "core_assistant") -> str:
+    if config.MEMORY_MODE == "all":
+        save_memory(question=user_input, answer=content)
+    elif config.MEMORY_MODE == "ai":
+        decision = should_save_memory(user_input, content)
+        if decision and decision.get("remember") is True:
+            save_memory(
+                question=user_input,
+                answer=content,
+                tags=decision.get("tags", []),
+                importance=decision.get("importance", "medium"),
+                context=decision.get("context")
+            )
+
+def get_response(*, user_input: str, agent: str = "core_assistant") -> str:
     messages = build_context(user_input, agent=agent)
 
     try:
         response = client.chat.completions.create(
             model="gpt-4-turbo",
             messages=messages,
-            temperature=0.7,
+            temperature=config.LLM_TEMPERATURE,
             stream=False
         )
     except Exception as e:
@@ -73,6 +127,23 @@ def get_response(user_input: str, agent: str = "core_assistant") -> str:
 
     content = response.choices[0].message.content
     print("\n🧠 Full GPT response:\n", content)
+
+    conversation_history.append({"role": "user", "content": user_input})
+    conversation_history.append({"role": "assistant", "content": content})
+
+    if config.MEMORY_MODE == "all":
+        save_memory(question=user_input, answer=content)
+    elif config.MEMORY_MODE == "ai":
+        decision = should_save_memory(user_input, content)
+        if decision:
+            save_memory(
+                question=user_input,
+                answer=content,
+                tags=decision.get("tags", []),
+                importance=decision.get("importance", "medium"),
+                context=decision.get("context")
+            )
+
     return content
 
 def handle_gpt_response(content: str, user_input: str = None):

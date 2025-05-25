@@ -1,6 +1,7 @@
 # voice_assistant.py — Local voice assistant with ElevenLabs voice and personality
 
 import os
+import platform
 import sounddevice as sd
 import numpy as np
 import whisper
@@ -42,6 +43,12 @@ def speak_mac(text):
     say_process.wait()
     time.sleep(1.0)
 
+def play_audio(filename="output.mp3"):
+    if platform.system() == "Darwin":
+        subprocess.run(["afplay", filename])
+    else:
+        subprocess.run(["ffplay", "-nodisp", "-autoexit", filename], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
 def speak_elevenlabs(text):
     url = f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVENLABS_VOICE_ID}/stream"
     headers = {
@@ -62,7 +69,7 @@ def speak_elevenlabs(text):
             for chunk in response.iter_content(chunk_size=1024):
                 if chunk:
                     f.write(chunk)
-        subprocess.run(["afplay", "output.mp3"])
+        play_audio("output.mp3")
         time.sleep(1.0)
     else:
         print("❌ ElevenLabs error:", response.status_code, response.text)

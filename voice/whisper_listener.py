@@ -5,7 +5,10 @@ from scipy.io.wavfile import write
 from datetime import datetime 
 import logging
 from pathlib import Path
+import sounddevice as sd
+
 log_debug = logging.getLogger("zackgpt").debug
+log_error = logging.getLogger("zackgpt").error
 
 # Globals
 whisper_model = None
@@ -32,17 +35,32 @@ reload_whisper_model()
 def transcribe_audio(audio_np, sample_rate=16000):
     """Transcribe audio using the selected model and log result."""
     try:
+        if config.DEBUG_MODE:
+            print(f"🔍 Using engine: {engine_type}")
+            print(f"🎧 Audio shape: {audio_np.shape}, dtype: {audio_np.dtype}")
+
         if engine_type == "openai-whisper":
             write(config.TEMP_AUDIO_FILE, sample_rate, audio_np)
+            if config.DEBUG_MODE:
+                print(f"💾 Temp file written: {config.TEMP_AUDIO_FILE}")
             result = whisper_model.transcribe(str(config.TEMP_AUDIO_FILE))
+            if config.DEBUG_MODE:
+                print(f"📜 Raw whisper result: {result}")
             if config.TEMP_AUDIO_FILE.exists():
                 config.TEMP_AUDIO_FILE.unlink()
             text = result.get("text", "").strip()
 
         else:
+            if config.DEBUG_MODE:
+                print("🧠 Using FasterWhisper...")
             audio_np = audio_np.astype("float32") / 32768.0
-            segments, _ = whisper_model.transcribe(audio_np, language="en")
-            text = "".join([seg.text for seg in segments if seg.text]).strip()
+            segments, info = whisper_model.transcribe(audio_np, language="en")
+            segments_list = list(segments)
+            if config.DEBUG_MODE:
+                print(f"📜 Segments returned: {segments_list}")
+            text = "".join([seg.text for seg in segments_list if seg.text]).strip()
+            if config.DEBUG_MODE:
+                print(f"✅ Final transcription: {text!r}")
 
         if text:
             _log_transcription(text)
@@ -77,12 +95,15 @@ def listen_for_audio(duration=None, sample_rate=None):
 def listen_until_silence(sample_rate=16000, aggressiveness=1, silence_duration=1.2):
     """Listen until silence using VAD and transcribe the result."""
     vad = webrtcvad.Vad(aggressiveness)
-    frame_duration = 20
+    frame_duration = 20  # ms
     frame_size = int(sample_rate * frame_duration / 1000)
     silence_threshold = int((silence_duration * 1000) / frame_duration)
 
     buffer = []
     silence_count = 0
+
+    if config.DEBUG_MODE:
+        print("🎤 Listening for speech...")
 
     try:
         with sd.RawInputStream(samplerate=sample_rate, blocksize=frame_size,
@@ -93,17 +114,37 @@ def listen_until_silence(sample_rate=16000, aggressiveness=1, silence_duration=1
                 frame_array = np.frombuffer(audio_bytes, dtype=np.int16)
 
                 if is_speech:
+                    if config.DEBUG_MODE:
+                        print("🗣️ Speech detected")
                     buffer.append(frame_array)
                     silence_count = 0
                 elif buffer and len(buffer) >= MIN_FRAMES:
                     silence_count += 1
+                    if config.DEBUG_MODE:
+                        print(f"🤫 Silence frame {silence_count}/{silence_threshold}")
                     if silence_count >= silence_threshold:
+                        if config.DEBUG_MODE:
+                            print("⏹️ Silence threshold reached.")
                         break
+
     except KeyboardInterrupt:
+        if config.DEBUG_MODE:
+            print("⛔ Interrupted")
+        return ""
+
+    if not buffer:
+        if config.DEBUG_MODE:
+            print("⚠️ No speech captured.")
         return ""
 
     audio_np = np.concatenate(buffer)
-    return transcribe_audio(audio_np)
+    if config.DEBUG_MODE:
+        print(f"📦 Captured {len(buffer)} frames")
+
+    text = transcribe_audio(audio_np)
+    if config.DEBUG_MODE:
+        print(f"🧠 Whisper result: {text!r}")
+    return text
 
 def listen_once(duration=None):
     return listen_for_audio(duration=duration)
