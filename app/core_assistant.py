@@ -1,7 +1,7 @@
 import json
 import re
 from app.prompt_loader import load_prompt
-from app.memory_engine import load_memory_by_tags, get_context_block, save_memory, conversation_history
+from app.memory_engine import load_memory_by_tags, get_context_block, save_memory_entry, conversation_history
 from openai import OpenAI
 import config
 
@@ -99,17 +99,19 @@ def run_assistant(*, user_input: str, agent: str = "core_assistant"):
     conversation_history.append({"role": "assistant", "content": content})
 
     if config.MEMORY_MODE == "all":
-        save_memory(question=user_input, answer=content)
+        save_memory_entry({
+            "question": user_input,
+            "answer": content,
+            "tags": [],
+            "agents": [agent],
+            "importance": "medium",
+            "source": "user",
+            "context": None
+        })
     elif config.MEMORY_MODE == "ai":
-        decision = should_save_memory(user_input, content)
-        if decision and decision.get("remember") is True:
-            save_memory(
-                question=user_input,
-                answer=content,
-                tags=decision.get("tags", []),
-                importance=decision.get("importance", "medium"),
-                context=decision.get("context")
-            )
+        memory_obj = should_save_memory(user_input, content)
+        if memory_obj:
+            save_memory_entry(memory_obj)
 
 def get_response(*, user_input: str, agent: str = "core_assistant") -> str:
     messages = build_context(user_input, agent=agent)
@@ -132,17 +134,19 @@ def get_response(*, user_input: str, agent: str = "core_assistant") -> str:
     conversation_history.append({"role": "assistant", "content": content})
 
     if config.MEMORY_MODE == "all":
-        save_memory(question=user_input, answer=content)
+        save_memory_entry({
+            "question": user_input,
+            "answer": content,
+            "tags": [],
+            "agents": [agent],
+            "importance": "medium",
+            "source": "user",
+            "context": None
+        })
     elif config.MEMORY_MODE == "ai":
-        decision = should_save_memory(user_input, content)
-        if decision:
-            save_memory(
-                question=user_input,
-                answer=content,
-                tags=decision.get("tags", []),
-                importance=decision.get("importance", "medium"),
-                context=decision.get("context")
-            )
+        memory_obj = should_save_memory(user_input, content)
+        if memory_obj:
+            save_memory_entry(memory_obj)
 
     return content
 

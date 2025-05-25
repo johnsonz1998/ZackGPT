@@ -55,3 +55,7 @@ TRANSCRIBE_LOG_DIR = BASE_DIR / "logs/transcribe"
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", 0.7))
 
 MEMORY_MODE = "ai" # "all" | "none"
+
+CHAT_LOG_PATH = BASE_DIR / "logs/chat_history.jsonl"
+
+MEMORY_DIR = BASE_DIR / "memories"

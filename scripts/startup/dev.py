@@ -1,7 +1,7 @@
 import os
 import json
 import config
-from app.memory_engine import get_context_block, get_conversation_history, clear_conversation_history, MEMORY_LOG
+from app.memory_engine import get_context_block, get_conversation_history, clear_conversation_history
 from voice import whisper_listener
 import voice.elevenlabs as eleven
 import voice.tts_mac as mac
@@ -153,7 +153,7 @@ def show_dev_menu():
         print("🧹 Short-term conversation history cleared.")
 
     elif choice == "12":
-        open(MEMORY_LOG, "w").close()
+        open(config.CHAT_LOG_PATH, "w").close()
         print("🧹 Memory log cleared.")
 
     elif choice == "13":
