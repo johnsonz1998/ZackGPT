@@ -1,0 +1,17 @@
+{
+  "id": "769f9c88-8049-4ea0-893b-0bbb78e2bd34",
+  "timestamp": "2025-05-27T05:15:46.173965",
+  "question": "What is the user's cat's name?",
+  "answer": "Sora",
+  "tags": [
+    "personal",
+    "pets",
+    "cat"
+  ],
+  "agents": [
+    "core_assistant"
+  ],
+  "importance": "medium",
+  "source": "user",
+  "context": "User's cat's name is Sora, described as a furball with attitude."
+}

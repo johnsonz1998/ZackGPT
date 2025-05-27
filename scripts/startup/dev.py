@@ -141,8 +141,24 @@ def show_dev_menu():
         profiles.reset_to_default()
 
     elif choice == "9":
-        print("\n📜 Long-Term Memory Log:")
-        print(get_context_block(config.MAX_CONTEXT_HISTORY))
+        from pathlib import Path
+
+        print("\n📜 Long-Term Memory Files (latest 5):")
+        memory_dir = config.MEMORY_DIR
+        files = sorted(Path(memory_dir).glob("*.json"), reverse=True)
+
+        if not files:
+            print("📭 No memory files found.")
+        else:
+            for file in files[:5]:
+                try:
+                    with open(file, "r") as f:
+                        data = json.load(f)
+                        print(f"📄 {file.name}")
+                        print(json.dumps(data, indent=2))
+                        print("-" * 40)
+                except Exception as e:
+                    print(f"⚠️ Error reading {file.name}: {e}")
 
     elif choice == "10":
         print("\n💬 Short-Term Conversation History:")
@@ -179,6 +195,24 @@ def show_dev_menu():
                 "DEFAULT_PERSONALITY": config.DEFAULT_PERSONALITY
             }, f, indent=2)
         os.system(f"python -m scripts.startup.main profiles/{temp_profile}")
+    elif choice == "90":
+        from app.vector_index import VectorMemoryIndex
+        memory_index = VectorMemoryIndex()
+        memory_index.load_memory_documents()
+        memory_index.build_index()
+
+        query = input("🔍 Enter semantic memory query: ")
+        response = memory_index.query(query)
+        print("🧠 Best memory match:", response.response)
+    elif choice == "90":
+        from app.vector_memory import VectorMemoryEngine
+        engine = VectorMemoryEngine()
+        engine.build_index()
+
+        user_query = input("🔍 Ask the assistant something it should remember: ")
+        result = engine.query(user_query)
+        print("🧠 Memory response:", result.response)
+
 
     elif choice == "0":
         print("👋 Exiting test menu.")

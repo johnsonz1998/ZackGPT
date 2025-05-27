@@ -1,27 +1,41 @@
 import json
 import re
-from app.prompt_loader import load_prompt
-from app.memory_engine import load_memory_by_tags, get_context_block, save_memory_entry, conversation_history
+import uuid
+from pathlib import Path
 from openai import OpenAI
+from app.vector_memory import VectorMemoryEngine
+
 import config
+from app.prompt_loader import load_prompt
+from app.memory_engine import (
+    load_memory_by_tags,
+    get_context_block,
+    save_memory,
+    conversation_history
+)
 
 client = OpenAI(api_key=config.OPENAI_API_KEY)
 
-def summarize_memory_for_context(mem_entries, max_items=5):
-    summary = []
-    for entry in mem_entries[:max_items]:
-        summary.append(f"- {entry['answer']} (tags: {', '.join(entry.get('tags', []))})")
-    return "\n".join(summary)
+_memory_engine = None
 
-def get_recent_conversation(n=5):
-    return "\n\n".join(
-        f"You: {msg['content']}" if msg['role'] == "user" else f"Assistant: {msg['content']}"
-        for msg in conversation_history[-2 * n:]
+def summarize_memory_for_context(mem_entries, max_items=5):
+    return "\n".join(
+        f"- {entry['answer']} (tags: {', '.join(entry.get('tags', []))})"
+        for entry in mem_entries[:max_items]
     )
 
 def build_context(user_input: str, agent: str = "core_assistant") -> list:
-    long_term_memory = load_memory_by_tags(user_input, agent)
-    memory_context = summarize_memory_for_context(long_term_memory)
+    global _memory_engine
+    if _memory_engine is None:
+        _memory_engine = VectorMemoryEngine()
+        _memory_engine.build_index()
+
+    vector_result = _memory_engine.query(user_input, top_k=5)
+
+    memory_context = vector_result.response.strip() if hasattr(vector_result, "response") else ""
+    if config.DEBUG_MODE:
+        print("\n🔎 Vector memory result:\n", memory_context)
+
     short_term = get_context_block(config.MAX_CONTEXT_HISTORY)
 
     system_prompt = load_prompt(agent, {
@@ -32,6 +46,11 @@ def build_context(user_input: str, agent: str = "core_assistant") -> list:
     context = [{"role": "system", "content": system_prompt}]
     context += conversation_history[-config.MAX_CONTEXT_HISTORY:]
     context.append({"role": "user", "content": user_input})
+
+    if config.DEBUG_MODE:
+        for doc in vector_result.source_nodes:
+            print("📄 Match:", doc.metadata.get("question", ""), "| Tags:", doc.metadata.get("tags", []))
+
     return context
 
 def should_save_memory(question: str, answer: str) -> dict:
@@ -56,134 +75,80 @@ def should_save_memory(question: str, answer: str) -> dict:
         )
 
         content = result.choices[0].message.content.strip()
-        print("\n🧠 RAW MEMORY DECISION STRING:\n", content)
+        if config.DEBUG_MODE:
+            print("\n\U0001f9e0 RAW MEMORY DECISION STRING:\n", content)
 
         parsed = json.loads(content)
+        memory = parsed.get("memory")
 
         if config.DEBUG_MODE:
             print("\n[AI Memory Decision Parsed JSON]:")
             print(json.dumps(parsed, indent=2))
 
-        memory = parsed.get("memory")
         if parsed.get("remember") is True and memory:
             required_keys = ["question", "answer", "tags", "context", "importance", "source", "agents"]
             if all(k in memory for k in required_keys):
+                memory["id"] = re.sub(r'[^a-zA-Z0-9_-]', '_', memory.get("id") or str(uuid.uuid4()))
                 return memory
             else:
-                print("⚠️ Skipping malformed memory:", memory)
+                if config.DEBUG_MODE:
+                    print("⚠️ Skipping malformed memory:", memory)
         return None
 
-    except Exception as e:
-        import traceback
-        print("⚠️ Memory decision failed:")
-        traceback.print_exc()
+    except Exception:
+        if config.DEBUG_MODE:
+            import traceback
+            print("⚠️ Memory decision failed:")
+            traceback.print_exc()
         return None
+
+def maybe_save_memory(question, answer, tags=None, agent="core_assistant"):
+    if config.MEMORY_MODE == "all":
+        if config.DEBUG_MODE:
+            print("💾 Saving unconditionally (all mode)")
+        save_memory(question=question, answer=answer, tags=tags, agent=agent)
+    elif config.MEMORY_MODE == "ai":
+        full = should_save_memory(question, answer)
+        if full:
+            if config.DEBUG_MODE:
+                print("💾 Saving memory from AI decision")
+            save_memory(
+                question=full["question"],
+                answer=full["answer"],
+                tags=full.get("tags", []),
+                importance=full.get("importance", "medium"),
+                context=full.get("context"),
+                agent=agent
+            )
+
+def generate_response(user_input: str, agent: str = "core_assistant") -> str:
+    messages = build_context(user_input, agent)
+    response = client.chat.completions.create(
+        model="gpt-4-turbo",
+        messages=messages,
+        temperature=config.LLM_TEMPERATURE,
+        stream=False
+    )
+    return response.choices[0].message.content.strip()
+
+def get_response(*, user_input: str, agent: str = "core_assistant") -> str:
+    content = generate_response(user_input, agent)
+    if config.DEBUG_MODE:
+        print("\n\U0001f9e0 Full GPT response:\n", content)
+
+    conversation_history.append({"role": "user", "content": user_input})
+    conversation_history.append({"role": "assistant", "content": content})
+
+    maybe_save_memory(user_input, content)
+
+    return content
 
 def run_assistant(*, user_input: str, agent: str = "core_assistant"):
+    if config.DEBUG_MODE:
+        print("DEBUG_MODE is", config.DEBUG_MODE)
     if not user_input.strip():
         print("⚠️ Empty transcription. Ignoring.")
         return
 
-    messages = build_context(user_input, agent=agent)
-
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4-turbo",
-            messages=messages,
-            temperature=config.LLM_TEMPERATURE,
-            stream=False
-        )
-    except Exception as e:
-        print(f"❌ GPT API call failed: {e}")
-        return
-
-    content = response.choices[0].message.content
-    print("\n🧠 Full GPT response:\n", content)
-
-    conversation_history.append({"role": "user", "content": user_input})
-    conversation_history.append({"role": "assistant", "content": content})
-
-    if config.MEMORY_MODE == "all":
-        save_memory_entry({
-            "question": user_input,
-            "answer": content,
-            "tags": [],
-            "agents": [agent],
-            "importance": "medium",
-            "source": "user",
-            "context": None
-        })
-    elif config.MEMORY_MODE == "ai":
-        memory_obj = should_save_memory(user_input, content)
-        if memory_obj:
-            save_memory_entry(memory_obj)
-
-def get_response(*, user_input: str, agent: str = "core_assistant") -> str:
-    messages = build_context(user_input, agent=agent)
-
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4-turbo",
-            messages=messages,
-            temperature=config.LLM_TEMPERATURE,
-            stream=False
-        )
-    except Exception as e:
-        print(f"❌ GPT API call failed: {e}")
-        return ""
-
-    content = response.choices[0].message.content
-    print("\n🧠 Full GPT response:\n", content)
-
-    conversation_history.append({"role": "user", "content": user_input})
-    conversation_history.append({"role": "assistant", "content": content})
-
-    if config.MEMORY_MODE == "all":
-        save_memory_entry({
-            "question": user_input,
-            "answer": content,
-            "tags": [],
-            "agents": [agent],
-            "importance": "medium",
-            "source": "user",
-            "context": None
-        })
-    elif config.MEMORY_MODE == "ai":
-        memory_obj = should_save_memory(user_input, content)
-        if memory_obj:
-            save_memory_entry(memory_obj)
-
-    return content
-
-def handle_gpt_response(content: str, user_input: str = None):
-    if not content.strip():
-        print("⚠️ GPT returned no content.")
-        return
-
-    if user_input:
-        conversation_history.append({"role": "user", "content": user_input})
-        conversation_history.append({"role": "assistant", "content": content})
-
-    sanitized = sanitize_gpt_json(content)
-    print("\n🔧 Sanitized JSON:\n", sanitized)
-
-    try:
-        parsed = json.loads(sanitized)
-
-        if isinstance(parsed, str):
-            print("🗣️ GPT response (plain string):", parsed)
-            return
-
-        print("🧾 Structured JSON response:\n", json.dumps(parsed, indent=2))
-        from app.action_router import handle_action_response
-        handle_action_response(parsed)
-
-    except json.JSONDecodeError as e:
-        print("⚠️ Could not parse response as JSON.")
-        print("Raw output:", repr(content))
-        print("Exception:", e)
-
-def sanitize_gpt_json(raw: str) -> str:
-    raw = raw.replace('“', '"').replace('”', '"').replace("‘", "'").replace("’", "'")
-    raw = re.sub(r',(\s*[}\]])', r'\1', raw)
-    return raw.strip()
+    content = get_response(user_input=user_input, agent=agent)
+    print("\n💬 Final assistant reply:", content)

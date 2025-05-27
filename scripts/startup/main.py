@@ -1,17 +1,18 @@
 import signal
 import config
+import traceback
+import json
+import os
+import sys
+
 from voice.whisper_listener import listen_until_silence, reload_whisper_model
 from llm.query_assistant import load_index, ask_gpt
 from llm.context_engine import analyze_context
 from voice.elevenlabs import speak as eleven_speak
 from voice.tts_mac import speak as mac_speak
-from app.memory_engine import save_memory, get_context_block
+from app.memory_engine import get_context_block
 from llm.prompt_builder import build_prompt
-from app.core_assistant import should_save_memory
-import traceback
-import json
-import os
-import sys
+from app.core_assistant import should_save_memory, maybe_save_memory
 
 def get_speaker():
     return eleven_speak if config.USE_ELEVENLABS else mac_speak
@@ -54,30 +55,17 @@ def run_voice_loop():
 
         try:
             print(f"YOU: {user_question}")
-
             memory_context = get_context_block(config.MAX_CONTEXT_HISTORY)
             context_analysis = analyze_context(user_question, memory_context)
             tags = context_analysis.get("memory_tags", [])
             system_goal = context_analysis.get("system_goal", "")
-
             prompt = build_prompt(user_question, memory_context, system_goal)
             response = ask_gpt(prompt)
 
             print(f"AI: {response}\n")
             get_speaker()(response)
 
-            if config.MEMORY_MODE == "all":
-                save_memory(question=user_question, answer=response, tags=tags)
-            elif config.MEMORY_MODE == "ai":
-                decision = should_save_memory(user_question, response)
-                if decision and decision.get("remember") is True:
-                    save_memory(
-                        question=user_question,
-                        answer=response,
-                        tags=decision.get("tags", []),
-                        importance=decision.get("importance", "medium"),
-                        context=decision.get("context")
-                    )
+            maybe_save_memory(user_question, response, tags)
 
         except Exception as e:
             print("⚠️ Error during response generation:")
@@ -103,18 +91,7 @@ def main():
             prompt = build_prompt(question, memory_context, system_goal)
             response = ask_gpt(prompt)
             print("AI:", response)
-            if config.MEMORY_MODE == "all":
-                save_memory(question=question, answer=response, tags=tags)
-            elif config.MEMORY_MODE == "ai":
-                decision = should_save_memory(question, response)
-                if decision and decision.get("remember") is True:
-                    save_memory(
-                        question=question,
-                        answer=response,
-                        tags=decision.get("tags", []),
-                        importance=decision.get("importance", "medium"),
-                        context=decision.get("context")
-                    )
+            maybe_save_memory(question, response, tags)
         else:
             while True:
                 question = input("YOU: ").strip()
@@ -129,18 +106,7 @@ def main():
                 prompt = build_prompt(question, memory_context, system_goal)
                 response = ask_gpt(prompt)
                 print("AI:", response)
-                if config.MEMORY_MODE == "all":
-                    save_memory(question=question, answer=response, tags=tags)
-                elif config.MEMORY_MODE == "ai":
-                    decision = should_save_memory(question, response)
-                    if decision and decision.get("remember") is True:
-                        save_memory(
-                            question=question,
-                            answer=response,
-                            tags=decision.get("tags", []),
-                            importance=decision.get("importance", "medium"),
-                            context=decision.get("context")
-                        )
+                maybe_save_memory(question, response, tags)
     else:
         run_voice_loop()
 
