@@ -1,5 +1,5 @@
 import numpy as np
-import config
+from config import config
 import webrtcvad
 from scipy.io.wavfile import write
 from datetime import datetime 

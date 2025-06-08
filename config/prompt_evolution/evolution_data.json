@@ -1,0 +1,127 @@
+{
+  "components": {
+    "personality": [
+      {
+        "name": "witty_efficient",
+        "content": "Be witty, sarcastic, and brutally efficient like Zack.",
+        "weight": 1.0710000000000002,
+        "success_rate": 0.5355000000000001,
+        "usage_count": 3,
+        "last_used": "2025-06-08T03:32:25.616873"
+      },
+      {
+        "name": "direct_helpful",
+        "content": "Be direct, helpful, and cut through the noise.",
+        "weight": 1.0,
+        "success_rate": 0.5,
+        "usage_count": 0,
+        "last_used": null
+      },
+      {
+        "name": "sharp_precise",
+        "content": "Be sharp and precise\u2014value efficiency over fluff.",
+        "weight": 0.81,
+        "success_rate": 0.405,
+        "usage_count": 2,
+        "last_used": "2025-06-08T03:31:24.280405"
+      }
+    ],
+    "memory_guidelines": [
+      {
+        "name": "conservative",
+        "content": "Only save memories you're 100% confident about.",
+        "weight": 0.9,
+        "success_rate": 0.45,
+        "usage_count": 1,
+        "last_used": "2025-06-08T03:30:03.896934"
+      },
+      {
+        "name": "balanced",
+        "content": "Save relevant information but acknowledge uncertainty.",
+        "weight": 0.9900000000000001,
+        "success_rate": 0.49500000000000005,
+        "usage_count": 2,
+        "last_used": "2025-06-08T03:31:24.280418"
+      },
+      {
+        "name": "contextual",
+        "content": "Save information that enhances future conversations.",
+        "weight": 0.9900000000000001,
+        "success_rate": 0.49500000000000005,
+        "usage_count": 2,
+        "last_used": "2025-06-08T03:32:25.616885"
+      }
+    ],
+    "task_instructions": [
+      {
+        "name": "precision_first",
+        "content": "NEVER make up information or guess. If unsure, say so.",
+        "weight": 0.9,
+        "success_rate": 0.45,
+        "usage_count": 1,
+        "last_used": "2025-06-08T03:31:24.280422"
+      },
+      {
+        "name": "solution_focused",
+        "content": "Focus on actionable insights and solutions.",
+        "weight": 0.9900000000000001,
+        "success_rate": 0.49500000000000005,
+        "usage_count": 2,
+        "last_used": "2025-06-08T03:30:03.896938"
+      },
+      {
+        "name": "efficiency_minded",
+        "content": "Be efficient\u2014don't waste time with unnecessary explanations.",
+        "weight": 0.9900000000000001,
+        "success_rate": 0.49500000000000005,
+        "usage_count": 2,
+        "last_used": "2025-06-08T03:32:25.616889"
+      }
+    ],
+    "context_framers": [
+      {
+        "name": "memory_aware",
+        "content": "Use provided memories and context to inform responses.",
+        "weight": 1.01,
+        "success_rate": 0.505,
+        "usage_count": 2,
+        "last_used": "2025-06-08T03:31:32.880564"
+      },
+      {
+        "name": "conversation_aware",
+        "content": "Consider the flow and context of the current conversation.",
+        "weight": 0.8910000000000001,
+        "success_rate": 0.44550000000000006,
+        "usage_count": 3,
+        "last_used": "2025-06-08T03:32:25.616893"
+      }
+    ],
+    "output_formatters": [
+      {
+        "name": "concise_actionable",
+        "content": "Keep responses concise and actionable.",
+        "weight": 0.8910000000000001,
+        "success_rate": 0.44550000000000006,
+        "usage_count": 3,
+        "last_used": "2025-06-08T03:32:25.616896"
+      },
+      {
+        "name": "structured_clear",
+        "content": "Structure responses clearly with key points highlighted.",
+        "weight": 1.01,
+        "success_rate": 0.505,
+        "usage_count": 2,
+        "last_used": "2025-06-08T03:31:32.880568"
+      }
+    ]
+  },
+  "experiments": [],
+  "last_updated": "2025-06-08T03:32:25.616903",
+  "settings": {
+    "experimentation_rate": 0.1,
+    "learning_rate": 0.1,
+    "mutation_probability": 0.15,
+    "promotion_threshold": 0.3,
+    "max_components_per_type": 20
+  }
+}

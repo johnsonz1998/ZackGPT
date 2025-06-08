@@ -1,6 +1,6 @@
 import subprocess
 import time
-import config
+from config import config
 import psutil
 
 say_process = None

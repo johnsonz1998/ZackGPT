@@ -58,7 +58,7 @@ ehthumbs.db
 Desktop.ini
 
 # Project-specific paths
-/profiles/
+/config/profiles/
 /memory_web/
 models/
 voice/tmp/

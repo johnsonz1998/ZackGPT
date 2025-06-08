@@ -58,14 +58,32 @@ class MemoryDatabase:
             debug_error("Failed to generate embedding", e)
             return []
             
+    def _cosine_similarity(self, vec1, vec2):
+        vec1 = np.array(vec1)
+        vec2 = np.array(vec2)
+        if np.linalg.norm(vec1) == 0 or np.linalg.norm(vec2) == 0:
+            return 0.0
+        return float(np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2)))
+
     def save_memory(self, question: str, answer: str, agent: str = "core_assistant", 
                    importance: str = "medium", tags: List[str] = None) -> str:
-        """Save a new memory to MongoDB."""
+        """Save a new memory to MongoDB, with semantic deduplication."""
         try:
             # Generate embeddings
             question_embedding = self._generate_embedding(question)
             answer_embedding = self._generate_embedding(answer)
-            
+
+            # Semantic deduplication: check against recent memories
+            recent = list(self.memories.find().sort("timestamp", -1).limit(10))
+            for mem in recent:
+                sim = self._cosine_similarity(question_embedding, mem.get("question_embedding", []))
+                if sim > 0.90:
+                    debug_info("Skipped saving memory due to high semantic similarity", {
+                        "similarity": sim,
+                        "existing_question": mem.get("question", "")
+                    })
+                    return None
+
             # Create memory document
             memory_doc = {
                 "timestamp": datetime.utcnow(),

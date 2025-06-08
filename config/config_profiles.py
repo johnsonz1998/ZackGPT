@@ -1,9 +1,9 @@
 import os
 import json
-import config
+from . import config
 from voice import whisper_listener
 
-PROFILE_DIR = "profiles"
+PROFILE_DIR = "config/profiles"
 DEFAULT_PROFILE = "default"
 
 os.makedirs(PROFILE_DIR, exist_ok=True)

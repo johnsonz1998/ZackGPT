@@ -2,12 +2,14 @@ import json
 import re
 import uuid
 from pathlib import Path
+from typing import Dict
 from openai import OpenAI
 from app.memory_db import MemoryDatabase
 from app.logger import debug_log, debug_info, debug_error, debug_success
-import config
+from config import config
 from app.prompt_utils import load_prompt
 import tiktoken
+from app.prompt_builder import EvolutionaryPromptBuilder
 
 class ConversationManager:
     def __init__(self, max_tokens=4000, max_messages=10):
@@ -73,6 +75,7 @@ class CoreAssistant:
         self._memory_db = None
         self._prompt = None
         self.conversation = ConversationManager()
+        self.prompt_builder = EvolutionaryPromptBuilder()
         
     @property
     def memory_db(self) -> MemoryDatabase:
@@ -109,15 +112,32 @@ class CoreAssistant:
                         memory_context += f"Tags: {', '.join(memory['tags'])}\n"
                     memory_context += "---\n"
             
-            # Load system prompt with memory context
-            system_prompt = load_prompt(agent, {
-                "MEMORY_CONTEXT": memory_context,
-                "SHORT_TERM": ""  # We'll handle this separately
-            })
+            # Build short-term context (recent conversation)
+            short_term = ""
+            for msg in self.conversation.messages[-6:]:
+                if msg["role"] in ("user", "assistant"):
+                    short_term += f"{msg['role'].capitalize()}: {msg['content']}\n"
+            
+            # Use evolutionary prompt builder with conversation context
+            conversation_context = {
+                'conversation_length': len(self.conversation.messages),
+                'recent_errors': self._count_recent_errors(),
+                'user_expertise': self._assess_user_expertise(),
+                'conversation_type': self._classify_conversation_type(user_input),
+                'task_complexity': 'complex' if len(user_input) > 100 else 'simple'
+            }
+            
+            system_prompt = self.prompt_builder.build_system_prompt(
+                short_term, 
+                memory_context,
+                conversation_context
+            )
             
             # Add system message to conversation
-            if not self.conversation.messages:
+            if not self.conversation.messages or self.conversation.messages[0]["role"] != "system":
                 self.conversation.add_message("system", system_prompt)
+            else:
+                self.conversation.messages[0]["content"] = system_prompt
             
             # Add user message
             self.conversation.add_message("user", user_input)
@@ -133,6 +153,99 @@ class CoreAssistant:
         except Exception as e:
             debug_error("Failed to build context", e)
             return [{"role": "user", "content": user_input}]
+    
+    def _count_recent_errors(self) -> int:
+        """Count recent errors/uncertainty in conversation."""
+        recent_messages = self.conversation.messages[-10:]
+        error_phrases = ["don't know", "not sure", "uncertain", "unclear", "can't help"]
+        
+        count = 0
+        for msg in recent_messages:
+            if msg.get('role') == 'assistant':
+                content = msg.get('content', '').lower()
+                if any(phrase in content for phrase in error_phrases):
+                    count += 1
+        return count
+    
+    def _assess_user_expertise(self) -> str:
+        """Assess user's expertise level from conversation."""
+        technical_terms = ["api", "database", "algorithm", "function", "server", "docker", 
+                          "config", "backend", "frontend", "deployment", "debug", "git"]
+        
+        recent_user_messages = [msg.get('content', '') for msg in self.conversation.messages[-10:] 
+                               if msg.get('role') == 'user']
+        
+        tech_score = sum(1 for msg in recent_user_messages 
+                        for term in technical_terms 
+                        if term.lower() in msg.lower())
+        
+        if tech_score > 5:
+            return 'high'
+        elif tech_score > 2:
+            return 'medium'
+        else:
+            return 'beginner'
+    
+    def _classify_conversation_type(self, user_input: str) -> str:
+        """Classify the type of conversation."""
+        user_lower = user_input.lower()
+        
+        if any(word in user_lower for word in ["error", "bug", "problem", "issue", "broken"]):
+            return 'troubleshooting'
+        elif any(word in user_lower for word in ["how", "what", "explain", "help", "learn"]):
+            return 'learning'
+        elif any(word in user_lower for word in ["build", "create", "make", "develop", "implement"]):
+            return 'creation'
+        elif any(word in user_lower for word in ["remember", "recall", "my", "save"]):
+            return 'memory'
+        else:
+            return 'general'
+    
+    def _assess_response_quality_ai(self, response: str, user_input: str, conversation_context: Dict) -> Dict:
+        """AI-powered response quality assessment."""
+        try:
+            from app.prompt_enhancer import HybridPromptEnhancer
+            ai_enhancer = HybridPromptEnhancer()
+            return ai_enhancer.assess_response_quality(response, user_input, conversation_context)
+        except Exception as e:
+            debug_error("AI assessment failed, using fallback", e)
+            return self._assess_response_quality_fallback(response, user_input)
+    
+    def _assess_response_quality_fallback(self, response: str, user_input: str) -> Dict:
+        """Fallback heuristic assessment (original method)."""
+        response_lower = response.lower()
+        
+        # Bad signs
+        bad_phrases = [
+            "i don't know", "i'm not sure", "i can't help", 
+            "sorry, i don't", "i'm unable to", "i don't have",
+            "unclear", "uncertain", "not confident"
+        ]
+        
+        issues = []
+        if any(phrase in response_lower for phrase in bad_phrases):
+            issues.append("uncertainty")
+        
+        if len(response) < 10:
+            issues.append("too_short")
+            
+        if response.lower().startswith("sorry"):
+            issues.append("overly_apologetic")
+        
+        success = len(issues) == 0 and len(response) > 20
+        score = 0.8 if success else 0.3
+        
+        return {
+            "overall_score": score,
+            "success": success,
+            "issues": issues,
+            "assessment_type": "fallback_heuristic",
+            "reasoning": "Fallback assessment due to AI failure"
+        }
+    
+    def get_evolution_stats(self) -> dict:
+        """Get statistics about prompt evolution for debugging."""
+        return self.prompt_builder.get_evolution_stats()
         
     def should_save_memory(self, question: str, answer: str) -> bool:
         """
@@ -223,8 +336,10 @@ class CoreAssistant:
             # Build context
             context = self.build_context(user_input)
             
-            # DEBUG: Print the full context being sent to OpenAI
+            # Log (context, prompt) pair for future training
             debug_log("LLM prompt context", context)
+            if context and context[0]["role"] == "system":
+                debug_log("System prompt for training", context[0]["content"])
             
             # Get response from OpenAI
             response = self.client.chat.completions.create(
@@ -238,8 +353,24 @@ class CoreAssistant:
             # Add assistant's response to conversation
             self.conversation.add_message("assistant", answer)
             
+            # Record AI-powered feedback for prompt evolution
+            conversation_context = {
+                'conversation_length': len(self.conversation.messages),
+                'recent_errors': self._count_recent_errors(),
+                'user_expertise': self._assess_user_expertise(),
+                'conversation_type': self._classify_conversation_type(user_input),
+                'task_complexity': 'complex' if len(user_input) > 100 else 'simple'
+            }
+            quality_assessment = self._assess_response_quality_ai(answer, user_input, conversation_context)
+            self.prompt_builder.record_response_feedback(
+                self.prompt_builder.current_prompt_metadata, 
+                quality_assessment
+            )
+            
             debug_info("Generated response", {
-                "response_length": len(answer)
+                "response_length": len(answer),
+                "ai_quality_score": quality_assessment.get("overall_score"),
+                "ai_assessment_issues": quality_assessment.get("issues", [])
             })
             
             # Maybe save to memory

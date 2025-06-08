@@ -73,3 +73,15 @@ VOICE_ID = os.getenv("VOICE_ID", "alloy")
 HTTP_PROXY = os.getenv("HTTP_PROXY")
 HTTPS_PROXY = os.getenv("HTTPS_PROXY")
 NO_PROXY = os.getenv("NO_PROXY")
+
+# ========== Prompt Enhancement Configuration ==========
+PROMPT_ENHANCER_USE_CLOUD = os.getenv("PROMPT_ENHANCER_USE_CLOUD", "true").lower() == "true"
+PROMPT_ENHANCER_USE_LOCAL = os.getenv("PROMPT_ENHANCER_USE_LOCAL", "true").lower() == "true" 
+PROMPT_ENHANCER_MODEL = os.getenv("PROMPT_ENHANCER_MODEL", "gpt-4-turbo")
+PROMPT_ENHANCER_GENERATION_RATE = float(os.getenv("PROMPT_ENHANCER_GENERATION_RATE", "0.3"))
+PROMPT_ENHANCER_DEBUG = os.getenv("PROMPT_ENHANCER_DEBUG", "false").lower() == "true"
+
+# ========== Prompt System Configuration ==========
+PROMPT_SYSTEM_ENABLED = os.getenv("PROMPT_SYSTEM_ENABLED", "true").lower() == "true"
+PROMPT_EVOLUTION_ENABLED = os.getenv("PROMPT_EVOLUTION_ENABLED", "true").lower() == "true"
+PROMPT_EVOLUTION_RATE = float(os.getenv("PROMPT_EVOLUTION_RATE", "0.3"))  # 30% evolution chance

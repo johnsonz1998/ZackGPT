@@ -1,5 +1,5 @@
 import json
-import config
+from config import config
 # Legacy memory actions removed. If needed, reimplement using memory_db.
 
 def speak_response(msg: str):

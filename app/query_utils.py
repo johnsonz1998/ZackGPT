@@ -1,7 +1,7 @@
 # query_utils.py — Combined LLM and memory query utilities
 
 import logging
-import config
+from config import config
 from openai import OpenAI
 from llama_index.core.storage.storage_context import StorageContext
 from llama_index.core import load_index_from_storage

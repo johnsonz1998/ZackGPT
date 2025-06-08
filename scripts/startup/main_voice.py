@@ -1,5 +1,5 @@
 import signal
-import config
+from config import config
 import traceback
 import json
 import os
@@ -83,7 +83,7 @@ def main():
     if profile_arg:
         load_profile(profile_arg)
     else:
-        load_profile(os.path.join("profiles", "default.json"))
+        load_profile(os.path.join("config/profiles", "default.json"))
 
     if "--text" in sys.argv:
         if "--once" in sys.argv:

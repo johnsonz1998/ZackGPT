@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-import config
+from config import config
 
 # Point to /ZACKGPT/prompts instead of app/prompts
 PROMPTS_DIR = Path(__file__).parent.parent / "prompts"

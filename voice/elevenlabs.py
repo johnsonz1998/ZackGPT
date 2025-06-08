@@ -1,7 +1,7 @@
 import requests
 import subprocess
 import time
-import config
+from config import config
 import platform
 
 def speak(text):
