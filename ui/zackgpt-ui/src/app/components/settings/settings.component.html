@@ -1,0 +1,251 @@
+<div class="settings-container">
+  <div class="settings-header">
+    <h1>⚙️ ZackGPT Settings</h1>
+    <p>Configure your AI assistant's behavior and capabilities</p>
+  </div>
+
+  <div class="loading-spinner" *ngIf="loading">
+    <div class="spinner"></div>
+    <p>Loading configuration...</p>
+  </div>
+
+  <form *ngIf="!loading" class="settings-form">
+    <!-- Core AI Settings -->
+    <div class="settings-section">
+      <h2>🤖 Core AI Settings</h2>
+      
+      <div class="form-group">
+        <label for="model_name">Model</label>
+        <select id="model_name" [(ngModel)]="config.model_name" (change)="onConfigChange()" name="model_name">
+          <option *ngFor="let model of modelOptions" [value]="model">{{ model }}</option>
+        </select>
+        <small>Choose the AI model for responses</small>
+      </div>
+
+      <div class="form-group">
+        <label for="max_tokens">Max Tokens</label>
+        <input 
+          type="number" 
+          id="max_tokens" 
+          [(ngModel)]="config.max_tokens" 
+          (input)="onConfigChange()"
+          name="max_tokens"
+          min="1" 
+          max="8000"
+          [class.invalid]="!isValidMaxTokens()">
+        <small [class.error]="!isValidMaxTokens()">
+          {{ isValidMaxTokens() ? 'Maximum length of AI responses (1-8000)' : 'Must be between 1 and 8000' }}
+        </small>
+      </div>
+
+      <div class="form-group">
+        <label for="temperature">Temperature</label>
+        <input 
+          type="number" 
+          id="temperature" 
+          [(ngModel)]="config.temperature" 
+          (input)="onConfigChange()"
+          name="temperature"
+          min="0" 
+          max="2" 
+          step="0.1"
+          [class.invalid]="!isValidTemperature()">
+        <small [class.error]="!isValidTemperature()">
+          {{ isValidTemperature() ? 'Creativity level: 0 (focused) to 2 (creative)' : 'Must be between 0 and 2' }}
+        </small>
+      </div>
+    </div>
+
+    <!-- Voice Settings -->
+    <div class="settings-section">
+      <h2>🎙️ Voice Settings</h2>
+      
+      <div class="form-group">
+        <label class="checkbox-label">
+          <input 
+            type="checkbox" 
+            [(ngModel)]="config.voice_enabled" 
+            (change)="onConfigChange()"
+            name="voice_enabled">
+          <span class="checkmark"></span>
+          Enable Voice Features
+        </label>
+        <small>Allow voice input and text-to-speech output</small>
+      </div>
+
+      <div class="form-group" *ngIf="config.voice_enabled">
+        <label for="voice_model">Speech Recognition Model</label>
+        <input 
+          type="text" 
+          id="voice_model" 
+          [(ngModel)]="config.voice_model" 
+          (input)="onConfigChange()"
+          name="voice_model"
+          placeholder="whisper-1">
+        <small>OpenAI Whisper model for speech recognition</small>
+      </div>
+
+      <div class="form-group" *ngIf="config.voice_enabled">
+        <label for="tts_voice">Text-to-Speech Voice</label>
+        <select id="tts_voice" [(ngModel)]="config.tts_voice" (change)="onConfigChange()" name="tts_voice">
+          <option *ngFor="let voice of ttsVoices" [value]="voice">{{ voice | titlecase }}</option>
+        </select>
+        <small>Choose the voice for spoken responses</small>
+      </div>
+    </div>
+
+    <!-- Memory Settings -->
+    <div class="settings-section">
+      <h2>🧠 Memory Settings</h2>
+      
+      <div class="form-group">
+        <label class="checkbox-label">
+          <input 
+            type="checkbox" 
+            [(ngModel)]="config.memory_enabled" 
+            (change)="onConfigChange()"
+            name="memory_enabled">
+          <span class="checkmark"></span>
+          Enable Memory System
+        </label>
+        <small>Remember conversations and learn from interactions</small>
+      </div>
+
+      <div class="form-group" *ngIf="config.memory_enabled">
+        <label for="max_memory_entries">Max Memory Entries</label>
+        <input 
+          type="number" 
+          id="max_memory_entries" 
+          [(ngModel)]="config.max_memory_entries" 
+          (input)="onConfigChange()"
+          name="max_memory_entries"
+          min="1" 
+          max="10000"
+          [class.invalid]="!isValidMemoryEntries()">
+        <small [class.error]="!isValidMemoryEntries()">
+          {{ isValidMemoryEntries() ? 'Maximum number of stored memory entries (1-10000)' : 'Must be between 1 and 10000' }}
+        </small>
+      </div>
+    </div>
+
+    <!-- Evolution Settings -->
+    <div class="settings-section">
+      <h2>🧬 Prompt Evolution Settings</h2>
+      
+      <div class="form-group">
+        <label class="checkbox-label">
+          <input 
+            type="checkbox" 
+            [(ngModel)]="config.evolution_enabled" 
+            (change)="onConfigChange()"
+            name="evolution_enabled">
+          <span class="checkmark"></span>
+          Enable Prompt Evolution
+        </label>
+        <small>Allow AI to improve its prompts based on interactions</small>
+      </div>
+
+      <div class="form-group" *ngIf="config.evolution_enabled">
+        <label for="evolution_frequency">Evolution Frequency</label>
+        <input 
+          type="number" 
+          id="evolution_frequency" 
+          [(ngModel)]="config.evolution_frequency" 
+          (input)="onConfigChange()"
+          name="evolution_frequency"
+          min="1" 
+          max="100"
+          [class.invalid]="!isValidEvolutionFreq()">
+        <small [class.error]="!isValidEvolutionFreq()">
+          {{ isValidEvolutionFreq() ? 'How often to run evolution (every N interactions, 1-100)' : 'Must be between 1 and 100' }}
+        </small>
+      </div>
+    </div>
+
+    <!-- API Keys -->
+    <div class="settings-section">
+      <h2>🔑 API Keys</h2>
+      
+      <div class="form-group">
+        <label for="openai_key">OpenAI API Key</label>
+        <input 
+          type="password" 
+          id="openai_key" 
+          [value]="config.openai_api_key_masked"
+          readonly
+          name="openai_key">
+        <small>Configure via environment variables or config.py</small>
+      </div>
+
+      <div class="form-group">
+        <label for="elevenlabs_key">ElevenLabs API Key</label>
+        <input 
+          type="password" 
+          id="elevenlabs_key" 
+          [value]="config.elevenlabs_api_key_masked"
+          readonly
+          name="elevenlabs_key">
+        <small>Configure via environment variables or config.py</small>
+      </div>
+    </div>
+
+    <!-- Debug Settings -->
+    <div class="settings-section">
+      <h2>🐛 Debug & Logging</h2>
+      
+      <div class="form-group">
+        <label class="checkbox-label">
+          <input 
+            type="checkbox" 
+            [(ngModel)]="config.debug_mode" 
+            (change)="onConfigChange()"
+            name="debug_mode">
+          <span class="checkmark"></span>
+          Debug Mode
+        </label>
+        <small>Enable detailed debugging information</small>
+      </div>
+
+      <div class="form-group">
+        <label for="log_level">Log Level</label>
+        <select id="log_level" [(ngModel)]="config.log_level" (change)="onConfigChange()" name="log_level">
+          <option *ngFor="let level of logLevels" [value]="level">{{ level }}</option>
+        </select>
+        <small>Choose logging verbosity level</small>
+      </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="settings-actions">
+      <div class="action-buttons">
+        <button 
+          type="button" 
+          class="btn btn-primary" 
+          (click)="saveConfig()" 
+          [disabled]="!isDirty || !isFormValid() || saving">
+          {{ saving ? 'Saving...' : 'Save Changes' }}
+        </button>
+        
+        <button 
+          type="button" 
+          class="btn btn-secondary" 
+          (click)="discardChanges()" 
+          [disabled]="!isDirty">
+          Discard Changes
+        </button>
+        
+        <button 
+          type="button" 
+          class="btn btn-danger" 
+          (click)="resetConfig()">
+          Reset to Defaults
+        </button>
+      </div>
+      
+      <div class="save-status" *ngIf="isDirty">
+        <span class="unsaved-indicator">●</span>
+        Unsaved changes
+      </div>
+    </div>
+  </form>
+</div> 

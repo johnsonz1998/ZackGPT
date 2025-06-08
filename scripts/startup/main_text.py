@@ -39,7 +39,56 @@ def run_text_mode():
                 
             # Get response
             response = assistant.process_input(user_input)
-            print(f"AI: {response}\n")
+            print(f"AI: {response}")
+            
+            # Get simple rating
+            try:
+                rating_input = input("Rating (0-5): ").strip()
+                if rating_input and rating_input.isdigit():
+                    rating = int(rating_input)
+                    if 0 <= rating <= 5:
+                        debug_info(f"👤 User provided rating: {rating}/5", {
+                            "rating_value": rating,
+                            "will_trigger_learning": rating > 0,
+                            "response_preview": response[:50] + "..." if len(response) > 50 else response
+                        })
+                        
+                        # Convert to quality assessment format
+                        user_assessment = {
+                            "overall_score": rating / 5.0,
+                            "success": rating >= 3,
+                            "user_rating": rating,
+                            "assessment_type": "user_rating"
+                        }
+                        
+                        # Record the feedback
+                        if hasattr(assistant, 'prompt_builder') and assistant.prompt_builder.current_prompt_metadata:
+                            debug_info("🔄 Feeding rating into learning system", {
+                                "metadata_available": True,
+                                "components_to_update": list(assistant.prompt_builder.current_prompt_metadata.get('components', {}).keys()),
+                                "learning_impact": "high" if rating in [1,2,4,5] else "moderate"
+                            })
+                            
+                            assistant.prompt_builder.record_response_feedback(
+                                assistant.prompt_builder.current_prompt_metadata,
+                                user_assessment
+                            )
+                            
+                            debug_success("✅ Learning update complete", {
+                                "rating_processed": f"{rating}/5",
+                                "system_learning": "active"
+                            })
+                        else:
+                            debug_info("⚠️ No prompt metadata available for learning")
+                    else:
+                        debug_info("❌ Invalid rating provided", {"input": rating_input})
+                else:
+                    debug_info("⏭️ No rating provided, skipping learning update")
+            except (ValueError, KeyboardInterrupt):
+                debug_info("⏭️ Rating interrupted or invalid, continuing without feedback")
+                pass  # Skip rating if invalid input or user interrupts
+            
+            print()  # Add spacing
             
         except KeyboardInterrupt:
             print("\n\nGoodbye!")

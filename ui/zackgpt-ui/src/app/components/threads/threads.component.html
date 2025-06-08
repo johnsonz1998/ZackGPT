@@ -1,0 +1,91 @@
+<div class="threads-container">
+  <div class="threads-header">
+    <h2>💬 Chat Threads</h2>
+    <button class="btn btn-primary btn-sm" (click)="startCreatingThread()" [disabled]="isCreatingThread || !connected">
+      <span class="icon">+</span>
+      New Thread
+    </button>
+  </div>
+
+  <!-- Error Display -->
+  <div class="error-message" *ngIf="error">
+    <span class="error-icon">⚠️</span>
+    <span>{{ error }}</span>
+    <button class="error-retry" (click)="retry()">Retry</button>
+    <button class="error-close" (click)="clearError()">×</button>
+  </div>
+
+  <!-- Connection Status -->
+  <div class="connection-status" *ngIf="!connected && !loading">
+    <span class="status-icon">🔌</span>
+    <span>Not connected to backend</span>
+  </div>
+
+  <div class="new-thread-form" *ngIf="isCreatingThread">
+    <input
+      id="newThreadInput"
+      type="text"
+      [(ngModel)]="newThreadName"
+      (keyup)="onKeyPress($event)"
+      placeholder="Enter thread name..."
+      class="thread-name-input">
+    <div class="form-actions">
+      <button class="btn btn-primary btn-xs" (click)="createThread()" [disabled]="!newThreadName.trim()">
+        Create
+      </button>
+      <button class="btn btn-secondary btn-xs" (click)="cancelCreatingThread()">
+        Cancel
+      </button>
+    </div>
+  </div>
+
+  <div class="loading-indicator" *ngIf="loading">
+    <div class="spinner-sm"></div>
+    <span>Loading threads...</span>
+  </div>
+
+  <div class="threads-list" *ngIf="!loading">
+    <div class="empty-state" *ngIf="threads.length === 0 && connected">
+      <div class="empty-icon">💭</div>
+      <h3>No conversations yet</h3>
+      <p>Start a new thread to begin chatting with ZackGPT</p>
+      <button class="btn btn-primary" (click)="startCreatingThread()">
+        Create Your First Thread
+      </button>
+    </div>
+
+    <div class="empty-state" *ngIf="threads.length === 0 && !connected">
+      <div class="empty-icon">🔌</div>
+      <h3>Backend disconnected</h3>
+      <p>Cannot load threads while disconnected</p>
+    </div>
+
+    <div 
+      class="thread-item" 
+      *ngFor="let thread of threads; trackBy: trackThread"
+      [class.selected]="thread.id === selectedThreadId"
+      (click)="selectThread(thread)">
+      
+      <div class="thread-content">
+        <div class="thread-header">
+          <h3 class="thread-name">{{ thread.title }}</h3>
+          <button 
+            class="delete-btn" 
+            (click)="deleteThread(thread, $event)"
+            title="Delete thread">
+            <span class="icon">×</span>
+          </button>
+        </div>
+        
+        <div class="thread-meta">
+          <span class="message-count">{{ thread.message_count }} messages</span>
+          <span class="last-updated">{{ formatDate(thread.updated_at) }}</span>
+        </div>
+      </div>
+      
+      <div class="thread-indicator" *ngIf="thread.id === selectedThreadId">
+        <div class="active-dot"></div>
+      </div>
+    </div>
+  </div>
+</div> 

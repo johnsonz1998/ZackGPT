@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 from config import config
 from app.prompt_utils import load_prompt
-from app.logger import debug_log, debug_info
+from app.logger import debug_log, debug_info, debug_success, log_component_selection, log_user_rating, log_component_performance_update
 from app.prompt_enhancer import HybridPromptEnhancer
 
 # Modular memory guidelines
@@ -39,6 +39,9 @@ class PromptComponent:
     
     def update_performance(self, success: bool):
         """Update performance based on feedback using simple statistical learning."""
+        old_success_rate = self.success_rate
+        old_weight = self.weight
+        
         self.usage_count += 1
         self.last_used = datetime.now().isoformat()
         
@@ -51,6 +54,25 @@ class PromptComponent:
         
         # Adjust weight based on success rate
         self.weight = max(0.1, self.success_rate * 2)
+        
+        debug_info(f"📈 Component performance updated: {self.name}", {
+            "success": success,
+            "usage_count": self.usage_count,
+            "success_rate": f"{old_success_rate:.3f} → {self.success_rate:.3f}",
+            "weight": f"{old_weight:.3f} → {self.weight:.3f}",
+            "change": f"{'+' if self.weight > old_weight else ''}{self.weight - old_weight:.3f}"
+        })
+        
+        # Log for aggregation and analysis
+        log_component_performance_update(
+            component_name=self.name,
+            success=success,
+            weight_before=old_weight,
+            weight_after=self.weight,
+            success_rate_before=old_success_rate,
+            success_rate_after=self.success_rate,
+            usage_count=self.usage_count
+        )
 
 class GenerativePromptEvolver:
     """Statistical learning system that evolves prompt generation strategies over time."""
@@ -247,37 +269,66 @@ class GenerativePromptEvolver:
         )
     
     def build_adaptive_prompt(self, context: Dict) -> Tuple[str, Dict]:
-        """Build a prompt that adapts based on context and statistical learning."""
+        """Build a prompt using statistical learning and contextual adaptation."""
         
-        # Analyze context to determine prompt strategy
+        debug_info("🔨 Building adaptive prompt", {
+            "context_type": context.get('conversation_type', 'general'),
+            "context_keys": list(context.keys()),
+            "total_components": sum(len(comps) for comps in self.components.values())
+        })
+        
+        # Analyze context to determine strategy
         strategy = self._analyze_context(context)
         
-        # Select components based on strategy and performance
-        selected_components = {}
-        prompt_metadata = {'strategy': strategy, 'components': {}}
-        
-        for comp_type in self.components.keys():
-            if self.components[comp_type]:  # Only if we have components of this type
-                component = self._select_component(comp_type, strategy, context)
-                selected_components[comp_type] = component
-                prompt_metadata['components'][comp_type] = component.name
-        
-        # Occasionally experiment with new components
-        if random.random() < self.settings["experimentation_rate"]:
-            experiment_type = random.choice(list(self.components.keys()))
-            new_component = self.generate_new_component(experiment_type, context)
-            self.components[experiment_type].append(new_component)
-            selected_components[experiment_type] = new_component
-            prompt_metadata['experiment'] = {
-                'type': experiment_type,
-                'component': new_component.name
+        debug_info(f"📋 Selected strategy: {strategy}", {
+            "context_analysis": {
+                "conversation_length": context.get('conversation_length', 0),
+                "recent_errors": context.get('recent_errors', 0),
+                "user_expertise": context.get('user_expertise', 'unknown'),
+                "task_complexity": context.get('task_complexity', 'unknown')
             }
-            debug_info(f"🧪 Experimenting with new {experiment_type}: {new_component.name}")
+        })
         
-        # Construct the final prompt using core_assistant.txt as base
+        # Select components for each type
+        selected_components = {}
+        for comp_type in self.components.keys():
+            component = self._select_component(comp_type, strategy, context)
+            selected_components[comp_type] = component
+        
+        debug_success("🎯 Component selection complete", {
+            "components_selected": {k: v.name for k, v in selected_components.items()},
+            "total_weight": sum(comp.weight for comp in selected_components.values()),
+            "avg_success_rate": sum(comp.success_rate for comp in selected_components.values()) / len(selected_components)
+        })
+        
+        # Build the final prompt
         prompt = self._construct_prompt_with_base_template(selected_components, context)
         
-        return prompt, prompt_metadata
+        # Create metadata for tracking
+        metadata = {
+            'strategy': strategy,
+            'components': {k: v.name for k, v in selected_components.items()},
+            'context_summary': {
+                'type': context.get('conversation_type', 'general'),
+                'complexity': context.get('task_complexity', 'unknown')
+            },
+            'component_stats': {
+                k: {
+                    'weight': v.weight,
+                    'success_rate': v.success_rate,
+                    'usage_count': v.usage_count
+                } for k, v in selected_components.items()
+            }
+        }
+        
+        debug_log("📝 Final prompt metadata", metadata)
+        debug_info(f"✅ Built adaptive prompt ({len(prompt)} chars)", {
+            "prompt_length": len(prompt),
+            "sections": prompt.count('\n\n') + 1,
+            "enhancement_points": sum(1 for comp in selected_components.values() if comp.usage_count > 0)
+        })
+        
+        return prompt, metadata
     
     def _analyze_context(self, context: Dict) -> str:
         """Analyze conversation context to determine optimal prompting strategy."""
@@ -299,40 +350,109 @@ class GenerativePromptEvolver:
         
         candidates = self.components[comp_type]
         if not candidates:
+            debug_info(f"🔍 No components available for {comp_type}, generating new one")
             return self.generate_new_component(comp_type, context)
+        
+        debug_info(f"🎯 Selecting {comp_type} component", {
+            "strategy": strategy,
+            "candidates": len(candidates),
+            "context": context.get('conversation_type', 'general')
+        })
         
         # Weight selection by performance and strategy fit
         weights = []
+        selection_details = []
+        
         for comp in candidates:
             # Base weight from statistical performance
-            weight = comp.weight * (comp.success_rate ** 2)  # Square to emphasize high performers
+            base_weight = comp.weight * (comp.success_rate ** 2)  # Square to emphasize high performers
+            weight = base_weight
+            bonuses = []
             
             # Strategy-specific bonuses (simple heuristics)
             if strategy == "concise_expert" and any(word in comp.content.lower() 
                                                   for word in ["efficient", "concise", "brief"]):
                 weight *= 1.5
+                bonuses.append("concise_expert_bonus(1.5x)")
             elif strategy == "error_recovery" and any(word in comp.content.lower() 
                                                     for word in ["careful", "accurate", "confident"]):
                 weight *= 1.3
+                bonuses.append("error_recovery_bonus(1.3x)")
             elif strategy == "detailed_guidance" and any(word in comp.content.lower() 
                                                        for word in ["detailed", "specific", "thorough"]):
                 weight *= 1.4
+                bonuses.append("detailed_guidance_bonus(1.4x)")
             
-            weights.append(max(0.1, weight))  # Ensure minimum weight
+            final_weight = max(0.1, weight)  # Ensure minimum weight
+            weights.append(final_weight)
+            
+            selection_details.append({
+                "name": comp.name[:30] + "..." if len(comp.name) > 30 else comp.name,
+                "content_preview": comp.content[:50] + "..." if len(comp.content) > 50 else comp.content,
+                "raw_weight": f"{comp.weight:.3f}",
+                "success_rate": f"{comp.success_rate:.3f}",
+                "base_calc": f"{comp.weight:.3f} × {comp.success_rate:.3f}² = {base_weight:.3f}",
+                "bonuses": bonuses or ["none"],
+                "final_weight": f"{final_weight:.3f}",
+                "usage_count": comp.usage_count
+            })
         
         # Weighted random selection
         total_weight = sum(weights)
         if total_weight == 0:
-            return random.choice(candidates)
+            debug_info("⚠️ All weights are zero, using random selection")
+            selected = random.choice(candidates)
+        else:
+            # Calculate probabilities for logging
+            probabilities = [w/total_weight for w in weights]
+            
+            r = random.uniform(0, total_weight)
+            cumulative = 0
+            selected_index = -1
+            
+            for i, weight in enumerate(weights):
+                cumulative += weight
+                if r <= cumulative:
+                    selected_index = i
+                    break
+            
+            if selected_index == -1:
+                selected_index = len(candidates) - 1  # Fallback
+                
+            selected = candidates[selected_index]
+            
+            debug_info(f"🎲 Component selection process for {comp_type}", {
+                "total_weight": f"{total_weight:.3f}",
+                "random_value": f"{r:.3f}",
+                "selected_index": selected_index,
+                "selected_component": selected.name,
+                "selection_probability": f"{probabilities[selected_index]:.1%}"
+            })
         
-        r = random.uniform(0, total_weight)
-        cumulative = 0
-        for i, weight in enumerate(weights):
-            cumulative += weight
-            if r <= cumulative:
-                return candidates[i]
+        # Log all candidates and their weights
+        debug_log(f"📊 {comp_type} component candidates", selection_details)
         
-        return candidates[-1]  # Fallback
+        debug_success(f"✅ Selected {comp_type} component: {selected.name}", {
+            "content": selected.content,
+            "weight": f"{selected.weight:.3f}",
+            "success_rate": f"{selected.success_rate:.3f}",
+            "usage_count": selected.usage_count
+        })
+        
+        # Log selection for analysis
+        log_component_selection(
+            component_name=selected.name,
+            component_type=comp_type,
+            selection_probability=probabilities[selected_index] if 'probabilities' in locals() and selected_index >= 0 else 0.0,
+            strategy=strategy,
+            context_type=context.get('conversation_type', 'general'),
+            weight=selected.weight,
+            success_rate=selected.success_rate,
+            usage_count=selected.usage_count,
+            total_candidates=len(candidates)
+        )
+        
+        return selected
     
     def _construct_prompt_with_base_template(self, components: Dict[str, PromptComponent], 
                                            context: Dict) -> str:
@@ -389,18 +509,94 @@ class GenerativePromptEvolver:
     
     def record_feedback(self, prompt_metadata: Dict, quality_assessment: Dict, 
                        user_feedback: Optional[str] = None):
-        """Record AI-powered feedback to improve future component selection."""
+        """Record feedback to improve future component selection, prioritizing user ratings."""
         
-        # Extract success from AI assessment
-        success = quality_assessment.get('success', quality_assessment.get('overall_score', 0) > 0.6)
+        debug_info("🔄 Processing feedback for prompt components", {
+            "has_user_rating": quality_assessment.get('user_rating') is not None,
+            "assessment_type": quality_assessment.get('assessment_type', 'unknown'),
+            "components_used": list(prompt_metadata.get('components', {}).keys())
+        })
         
-        # Update component performance using AI-enhanced scoring
+        # Prioritize user ratings over heuristic scoring
+        if quality_assessment.get('user_rating') is not None:
+            # User gave explicit rating - this is gold standard feedback!
+            user_rating = quality_assessment.get('user_rating')
+            success = user_rating >= 3  # 3+ out of 5 is success
+            overall_score = user_rating / 5.0
+            
+            debug_success(f"⭐ User rated response: {user_rating}/5", {
+                "converted_score": overall_score,
+                "success": success,
+                "rating_category": "excellent" if user_rating >= 4 else "good" if user_rating == 3 else "poor"
+            })
+            
+            # Log user rating for analysis
+            log_user_rating(
+                rating=user_rating,
+                component_name=prompt_metadata['components'][comp_type],
+                weight_before=prompt_metadata['component_stats'][comp_type]['weight'],
+                weight_after=prompt_metadata['component_stats'][comp_type]['weight'],
+                component_type=comp_type,
+                success_rate_before=prompt_metadata['component_stats'][comp_type]['success_rate'],
+                success_rate_after=prompt_metadata['component_stats'][comp_type]['success_rate'],
+                rating_impact="boost"
+            )
+        else:
+            # Fall back to heuristic assessment
+            success = quality_assessment.get('success', quality_assessment.get('overall_score', 0) > 0.6)
+            overall_score = quality_assessment.get('overall_score', 0.5)
+            
+            debug_info("🤖 Using heuristic assessment", {
+                "overall_score": overall_score,
+                "success": success,
+                "assessment_details": quality_assessment.get('reasoning', 'No details')
+            })
+        
+        # Update component performance
+        component_updates = []
         for comp_type, comp_name in prompt_metadata.get('components', {}).items():
             for component in self.components[comp_type]:
                 if component.name == comp_name:
-                    # Use AI assessment for more nuanced feedback
-                    overall_score = quality_assessment.get('overall_score', 0.5)
-                    component.update_performance(overall_score > 0.6)
+                    old_weight = component.weight
+                    old_success_rate = component.success_rate
+                    
+                    # User ratings get stronger weight adjustment
+                    weight_multiplier = 1.0
+                    if quality_assessment.get('user_rating') is not None:
+                        user_rating = quality_assessment.get('user_rating')
+                        if user_rating >= 4:
+                            weight_multiplier = 1.3
+                            component.weight = min(2.0, component.weight * 1.3)  # Big boost for 4-5
+                            debug_success(f"🚀 BOOSTING component {comp_name}", {
+                                "user_rating": f"{user_rating}/5",
+                                "weight_change": f"{old_weight:.3f} → {component.weight:.3f}",
+                                "multiplier": "1.3x (excellent rating)"
+                            })
+                        elif user_rating <= 2:
+                            weight_multiplier = 0.7
+                            component.weight = max(0.3, component.weight * 0.7)  # Penalty for 1-2
+                            debug_info(f"⬇️ PENALIZING component {comp_name}", {
+                                "user_rating": f"{user_rating}/5", 
+                                "weight_change": f"{old_weight:.3f} → {component.weight:.3f}",
+                                "multiplier": "0.7x (poor rating)"
+                            })
+                        else:
+                            debug_info(f"➡️ NEUTRAL component {comp_name}", {
+                                "user_rating": f"{user_rating}/5",
+                                "weight": f"{component.weight:.3f} (unchanged)"
+                            })
+                    
+                    # Standard performance update
+                    component.update_performance(success)
+                    
+                    component_updates.append({
+                        "name": comp_name,
+                        "type": comp_type,
+                        "weight_change": f"{old_weight:.3f} → {component.weight:.3f}",
+                        "success_rate_change": f"{old_success_rate:.3f} → {component.success_rate:.3f}",
+                        "usage_count": component.usage_count,
+                        "weight_multiplier": weight_multiplier
+                    })
                     
                     # Store detailed assessment for analysis
                     if not hasattr(component, 'detailed_assessments'):
@@ -414,16 +610,24 @@ class GenerativePromptEvolver:
                     component.detailed_assessments = component.detailed_assessments[-10:]
                     break
         
-        # Record experiment results with AI assessment
+        debug_log("📈 Component learning summary", component_updates)
+        
+        # Record experiment results
         if 'experiment' in prompt_metadata:
             exp_data = {
                 'timestamp': datetime.now().isoformat(),
                 'experiment': prompt_metadata['experiment'],
                 'success': success,
-                'ai_assessment': quality_assessment,
+                'assessment': quality_assessment,
                 'feedback': user_feedback
             }
             self.experiments.append(exp_data)
+            
+            debug_info("🧪 Recorded experimental component result", {
+                "experiment_type": prompt_metadata['experiment'].get('type', 'unknown'),
+                "success": success,
+                "total_experiments": len(self.experiments)
+            })
             
             # If experiment was successful, boost its weight for future selection
             if success and random.random() < self.settings["promotion_threshold"]:
@@ -431,6 +635,7 @@ class GenerativePromptEvolver:
         
         # Periodic cleanup and saving
         if len(self.experiments) % 10 == 0:
+            debug_info("🧹 Performing periodic cleanup and save")
             self._cleanup_components()
             self.save_evolution_data()
     

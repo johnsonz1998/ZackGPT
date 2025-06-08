@@ -325,12 +325,28 @@ class HybridPromptEnhancer:
     def assess_response_quality(self, response: str, user_input: str, context: Dict = None) -> Dict:
         """Assess response quality using simple, understandable heuristics."""
         
+        debug_info("🔍 Starting response quality assessment", {
+            "response_length": len(response),
+            "user_input_length": len(user_input),
+            "has_context": context is not None,
+            "assessment_method": "simple_heuristic"
+        })
+        
         # Always do simple scoring (fast and debuggable)
         assessment = self.scorer.assess_response(response, user_input, context)
         self.stats["assessments_performed"] += 1
         
+        debug_info("📊 Heuristic assessment complete", {
+            "overall_score": f"{assessment['overall_score']:.3f}",
+            "success": assessment['success'],
+            "issues_found": assessment.get('issues', []),
+            "reasoning": assessment.get('reasoning', 'No reasoning'),
+            "transparency_details": assessment.get('transparency', {})
+        })
+        
         # Occasionally validate with local model
         if self.local_helper.available and random.random() < 0.1:  # 10% of responses
+            debug_info("🤖 Performing local model validation (10% chance)")
             local_check = self.local_helper.quick_quality_check(response, user_input)
             assessment["local_validation"] = local_check
             self.stats["local_checks"] += 1
@@ -338,11 +354,25 @@ class HybridPromptEnhancer:
             # Log disagreements for debugging
             simple_says_good = assessment["success"]
             if simple_says_good != local_check and self.config.debug_mode:
-                debug_log("Scoring disagreement", {
-                    "simple_score": assessment["overall_score"], 
-                    "local_says_good": local_check,
-                    "response_preview": response[:50] + "..."
+                debug_log("⚠️ Assessment disagreement detected", {
+                    "heuristic_says": "good" if simple_says_good else "bad",
+                    "local_model_says": "good" if local_check else "bad", 
+                    "heuristic_score": assessment["overall_score"],
+                    "response_preview": response[:100] + "..." if len(response) > 100 else response,
+                    "disagreement_analysis": "Local model and heuristics have different opinions"
                 })
+            else:
+                debug_success("✅ Assessment agreement", {
+                    "both_agree": "good" if simple_says_good else "bad",
+                    "confidence": "high"
+                })
+        
+        debug_success("🎯 Quality assessment complete", {
+            "final_score": f"{assessment['overall_score']:.3f}",
+            "success_rating": assessment['success'],
+            "had_local_validation": "local_validation" in assessment,
+            "total_assessments_performed": self.stats["assessments_performed"]
+        })
         
         return assessment
     

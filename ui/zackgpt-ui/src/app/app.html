@@ -1,0 +1,46 @@
+<div class="app-layout">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <!-- Navigation Header -->
+    <div class="sidebar-header">
+      <div class="logo">
+        <h1>🤖 ZackGPT</h1>
+      </div>
+      
+      <nav class="main-nav">
+        <button 
+          class="nav-btn" 
+          [class.active]="currentView === 'dashboard'"
+          (click)="showDashboard()">
+          <span class="icon">💬</span>
+          Chat
+        </button>
+        
+        <button 
+          class="nav-btn" 
+          [class.active]="currentView === 'settings'"
+          (click)="showSettings()">
+          <span class="icon">⚙️</span>
+          Settings
+        </button>
+      </nav>
+    </div>
+
+    <!-- Threads List (only shown in dashboard view) -->
+    <div class="threads-section" *ngIf="currentView === 'dashboard'">
+      <app-threads (threadSelected)="onThreadSelected($event)"></app-threads>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <app-dashboard 
+      *ngIf="currentView === 'dashboard'" 
+      [selectedThread]="selectedThread">
+    </app-dashboard>
+    
+    <app-settings 
+      *ngIf="currentView === 'settings'">
+    </app-settings>
+  </div>
+</div>

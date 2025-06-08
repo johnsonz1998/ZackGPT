@@ -1,0 +1,334 @@
+<div class="dashboard-container">
+  <!-- Connection Status Header -->
+  <div class="status-header" [ngClass]="{'connected': connected, 'disconnected': !connected}">
+    <div class="status-info">
+      <h1>🤖 ZackGPT Dashboard</h1>
+      <div class="connection-status">
+        <span class="status-indicator" [ngClass]="{'connected': connected, 'disconnected': !connected}"></span>
+        <span class="status-text">
+          {{ connected ? 'Connected to Backend' : 'Disconnected' }}
+        </span>
+        <button *ngIf="!connected" (click)="reconnect()" class="reconnect-btn">
+          Reconnect
+        </button>
+      </div>
+    </div>
+    
+    <!-- Health Status -->
+    <div *ngIf="healthStatus" class="health-status">
+      <div class="health-item">
+        <span class="health-label">Status:</span>
+        <span class="health-value" [ngClass]="healthStatus.status">{{ healthStatus.status }}</span>
+      </div>
+      <div class="health-item">
+        <span class="health-label">Version:</span>
+        <span class="health-value">{{ healthStatus.version }}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Error Display -->
+  <div *ngIf="error" class="error-banner">
+    <span class="error-icon">⚠️</span>
+    <span class="error-message">{{ error }}</span>
+    <button (click)="clearError()" class="error-close">×</button>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content" *ngIf="connected && selectedThread">
+    <!-- Chat Interface -->
+    <div class="chat-container">
+      <!-- Messages -->
+      <div class="messages-container" #messagesContainer>
+        <div *ngIf="loading" class="loading-spinner">
+          <div class="spinner"></div>
+          <span>Loading messages...</span>
+        </div>
+        
+        <div *ngIf="messages.length === 0 && !loading" class="empty-chat">
+          <div class="empty-icon">💬</div>
+          <h3>Start a conversation</h3>
+          <p>Send a message to begin chatting with ZackGPT</p>
+        </div>
+
+        <div class="message" 
+             *ngFor="let message of messages; trackBy: trackMessage"
+             [ngClass]="getMessageClass(message.role)">
+          <div class="message-content">
+            <div class="message-text">{{ message.content }}</div>
+            <div class="message-time">{{ formatTime(message.timestamp) }}</div>
+          </div>
+        </div>
+
+        <!-- Typing Indicator -->
+        <div *ngIf="isTyping" class="typing-indicator">
+          <div class="typing-dots">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <span class="typing-text">ZackGPT is typing...</span>
+        </div>
+      </div>
+
+      <!-- Message Input -->
+      <div class="input-container">
+        <div class="input-wrapper">
+          <textarea 
+            [(ngModel)]="currentMessage"
+            (keydown)="onKeyPress($event)"
+            placeholder="Type your message here..."
+            class="message-input"
+            rows="1"
+            [disabled]="isTyping || !connected"></textarea>
+          <button 
+            (click)="sendMessage()"
+            [disabled]="!currentMessage.trim() || isTyping || !connected"
+            class="send-button">
+            <span *ngIf="!isTyping">Send</span>
+            <span *ngIf="isTyping">...</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sidebar with Stats -->
+    <div class="sidebar">
+      <div class="stats-section">
+        <h3>📊 System Stats</h3>
+        <div *ngIf="systemStats" class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Threads</span>
+            <span class="stat-value">{{ systemStats.total_threads }}</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Messages</span>
+            <span class="stat-value">{{ systemStats.total_messages }}</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Evolution</span>
+            <span class="stat-value">{{ systemStats.evolution_stats?.status || 'Active' }}</span>
+          </div>
+        </div>
+        <button (click)="refreshStats()" class="refresh-btn">Refresh</button>
+      </div>
+
+      <div class="features-section">
+        <h3>⚡ Features</h3>
+        <div *ngIf="healthStatus" class="feature-list">
+          <div class="feature-item" [ngClass]="{'enabled': healthStatus.features.websocket_chat}">
+            <span class="feature-icon">{{ healthStatus.features.websocket_chat ? '✅' : '❌' }}</span>
+            <span>Real-time Chat</span>
+          </div>
+          <div class="feature-item" [ngClass]="{'enabled': healthStatus.features.thread_management}">
+            <span class="feature-icon">{{ healthStatus.features.thread_management ? '✅' : '❌' }}</span>
+            <span>Thread Management</span>
+          </div>
+          <div class="feature-item" [ngClass]="{'enabled': healthStatus.features.memory_persistence}">
+            <span class="feature-icon">{{ healthStatus.features.memory_persistence ? '✅' : '❌' }}</span>
+            <span>Memory System</span>
+          </div>
+          <div class="feature-item" [ngClass]="{'enabled': healthStatus.features.prompt_evolution}">
+            <span class="feature-icon">{{ healthStatus.features.prompt_evolution ? '✅' : '❌' }}</span>
+            <span>Prompt Evolution</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- No Thread Selected -->
+  <div class="no-thread" *ngIf="connected && !selectedThread">
+    <div class="no-thread-content">
+      <div class="no-thread-icon">💬</div>
+      <h2>No Thread Selected</h2>
+      <p>Select a thread from the sidebar to start chatting</p>
+    </div>
+  </div>
+
+  <!-- Backend Disconnected -->
+  <div class="disconnected-state" *ngIf="!connected">
+    <div class="disconnected-content">
+      <div class="disconnected-icon">🔌</div>
+      <h2>Backend Not Connected</h2>
+      <p>Make sure the ZackGPT API server is running:</p>
+      <div class="command-box">
+        <code>python -m scripts.startup.main_web</code>
+      </div>
+      <p>Or start in hybrid mode:</p>
+      <div class="command-box">
+        <code>python -m scripts.startup.main</code>
+      </div>
+      <button (click)="reconnect()" class="reconnect-btn large">
+        Try to Reconnect
+      </button>
+    </div>
+  </div>
+</div>
+
+<style>
+.dashboard-container {
+  padding: 20px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  max-width: 900px;
+  margin: 0 auto;
+  line-height: 1.6;
+}
+
+.test-header {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: white;
+  padding: 30px;
+  border-radius: 12px;
+  margin-bottom: 30px;
+  text-align: center;
+}
+
+.test-header h1 {
+  margin: 0 0 15px 0;
+  font-size: 2.5rem;
+  font-weight: 700;
+}
+
+.no-backend-info h2 {
+  margin: 15px 0 10px 0;
+  font-size: 1.3rem;
+  font-weight: 600;
+}
+
+.no-backend-info p {
+  margin: 8px 0;
+  opacity: 0.9;
+  font-size: 1rem;
+}
+
+.backend-info {
+  display: grid;
+  gap: 30px;
+}
+
+.info-section {
+  background: white;
+  padding: 30px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e5e7eb;
+}
+
+.info-section h3 {
+  margin: 0 0 20px 0;
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: #1f2937;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.instruction-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.step {
+  display: flex;
+  align-items: flex-start;
+  gap: 15px;
+  padding: 20px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border-left: 4px solid #3b82f6;
+}
+
+.step-number {
+  background: #3b82f6;
+  color: white;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.step-content strong {
+  color: #1f2937;
+  font-size: 1.1rem;
+}
+
+.step-content code {
+  background: #374151;
+  color: #f9fafb;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: 'Monaco', 'Consolas', monospace;
+  font-size: 0.9rem;
+  margin: 5px 0;
+  display: inline-block;
+}
+
+.step-content p {
+  margin: 8px 0 0 0;
+  color: #6b7280;
+}
+
+.todo-list, .feature-list {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.todo-item, .feature-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 15px;
+  padding: 15px;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.todo-icon, .feature-icon {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+
+.todo-item strong, .feature-item strong {
+  color: #1f2937;
+  font-size: 1rem;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.todo-item p, .feature-item p {
+  margin: 0;
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 768px) {
+  .dashboard-container {
+    padding: 15px;
+  }
+  
+  .test-header {
+    padding: 20px;
+  }
+  
+  .test-header h1 {
+    font-size: 2rem;
+  }
+  
+  .info-section {
+    padding: 20px;
+  }
+  
+  .step {
+    flex-direction: column;
+    text-align: center;
+  }
+}
+</style> 
