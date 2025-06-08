@@ -15,5 +15,5 @@ Return ONLY the optimized prompt to send to the assistant.
 
 def run_local_model(prompt: str) -> str:
     # TEMP: using OpenAI as a stand-in until local model is integrated
-    from llm.query_assistant import ask_gpt
+    from app.query_utils import ask_gpt
     return ask_gpt(prompt)

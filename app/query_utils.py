@@ -1,4 +1,4 @@
-# llm/query_assistant.py
+# query_utils.py — Combined LLM and memory query utilities
 
 import logging
 import config
@@ -8,6 +8,7 @@ from llama_index.core import load_index_from_storage
 from llama_index.llms.openai import OpenAI as LlamaOpenAI
 from llama_index.core import Settings
 import os
+# --- LLM Query Logic ---
 
 log_debug = logging.getLogger("zackgpt").debug
 
@@ -23,7 +24,7 @@ Settings.llm = LlamaOpenAI(
 # Separate OpenAI client (not LlamaIndex) for raw prompts
 if not config.OPENAI_API_KEY:
     raise ValueError("OPENAI_API_KEY not found in environment variables")
-    
+
 print(f"Debug: API Key length: {len(config.OPENAI_API_KEY) if config.OPENAI_API_KEY else 0}")
 print(f"Debug: API Key prefix: {config.OPENAI_API_KEY[:8] if config.OPENAI_API_KEY else 'None'}...")
 
@@ -68,3 +69,28 @@ def ask_gpt(prompt: str) -> str:
     except Exception as e:
         log_debug(f"OpenAI request failed: {e}")
         return "I'm having trouble responding right now."
+
+# --- Memory Query Logic ---
+
+def handle_memory_query_request(tags: list = None, agent: str = None) -> list:
+    """
+    Returns a filtered list of memory entries based on tag and/or agent.
+    """
+    # NOTE: This depends on memory_web.load_all_memory, which should be available in your project.
+    from memory_web import load_all_memory
+    all_memory = load_all_memory(agent=agent)
+    results = []
+    for category, entries in all_memory.items():
+        for entry in entries:
+            if tags:
+                if not any(tag in entry.get("tags", []) for tag in tags):
+                    continue
+            results.append({
+                "category": category,
+                "text": entry["text"],
+                "tags": entry.get("tags", []),
+                "agents": entry.get("agents", []),
+                "importance": entry.get("importance", "medium"),
+                "created": entry.get("created"),
+            })
+    return results 

@@ -14,7 +14,7 @@ ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 # ========== Core Toggles ==========
 USE_ELEVENLABS = os.getenv("USE_ELEVENLABS", "True") == "True"
 USE_WHISPER = os.getenv("USE_WHISPER", "True") == "True"
-DEBUG_MODE = os.getenv("DEBUG_MODE", "False") == "True"
+DEBUG_MODE = os.getenv("DEBUG_MODE", "False").lower() == "true"
 
 # ========== Paths ==========
 BASE_DIR = Path(__file__).resolve().parent
@@ -58,3 +58,18 @@ MEMORY_MODE = "ai" # "all" | "none"
 CHAT_LOG_PATH = BASE_DIR / "logs/chat_history.jsonl"
 
 MEMORY_DIR = BASE_DIR / "memories"
+
+# ========== Memory Configuration ==========
+MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
+MEMORY_THRESHOLD = float(os.getenv("MEMORY_THRESHOLD", "0.6"))
+MAX_MEMORIES = int(os.getenv("MAX_MEMORIES", "5"))
+
+# ========== Voice Configuration ==========
+VOICE_ENABLED = os.getenv("VOICE_ENABLED", "False").lower() == "true"
+VOICE_MODEL = os.getenv("VOICE_MODEL", "tts-1")
+VOICE_ID = os.getenv("VOICE_ID", "alloy")
+
+# ========== Proxy Configuration ==========
+HTTP_PROXY = os.getenv("HTTP_PROXY")
+HTTPS_PROXY = os.getenv("HTTPS_PROXY")
+NO_PROXY = os.getenv("NO_PROXY")

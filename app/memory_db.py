@@ -7,7 +7,7 @@ from pymongo.database import Database
 from pymongo.errors import ConnectionFailure
 import numpy as np
 from openai import OpenAI
-from .debug_logger import debug_log, debug_error, debug_info, debug_success
+from .logger import debug_log, debug_error, debug_info, debug_success
 
 class MemoryDatabase:
     def __init__(self, mongo_uri: str = None):
@@ -16,7 +16,6 @@ class MemoryDatabase:
         self.client = MongoClient(self.mongo_uri)
         self.db: Database = self.client.zackgpt
         self.memories: Collection = self.db.memories
-        self.embeddings: Collection = self.db.embeddings
         
         # Initialize OpenAI client for embeddings
         self.openai_client = OpenAI()

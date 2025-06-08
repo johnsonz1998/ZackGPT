@@ -1,11 +1,19 @@
 import os
 import json
 import config
-from app.memory_engine import get_context_block, get_conversation_history, clear_conversation_history
 from voice import whisper_listener
 import voice.elevenlabs as eleven
 import voice.tts_mac as mac
 import app.config_profiles as profiles
+from app.query_utils import load_index
+
+# Stubs for removed memory_engine functions
+def get_context_block(max_items):
+    return ""
+def get_conversation_history():
+    return []
+def clear_conversation_history():
+    pass
 
 def show_dev_menu():
     print("\n🛠️  ZackGPT Dev Menu\n")
@@ -176,10 +184,10 @@ def show_dev_menu():
         run_test_interaction()
 
     elif choice == "14":
-        os.system("python -m scripts.startup.main --text --once")
+        os.system("python -m scripts.startup.main_text --once")
 
     elif choice == "15":
-        os.system("python -m scripts.startup.main --text")
+        os.system("python -m scripts.startup.main_text")
 
     elif choice == "16":
         print("🎤 Launching full voice assistant with current config...")
@@ -194,25 +202,7 @@ def show_dev_menu():
                 "MACOS_VOICE": config.MACOS_VOICE,
                 "DEFAULT_PERSONALITY": config.DEFAULT_PERSONALITY
             }, f, indent=2)
-        os.system(f"python -m scripts.startup.main profiles/{temp_profile}")
-    elif choice == "90":
-        from app.vector_index import VectorMemoryIndex
-        memory_index = VectorMemoryIndex()
-        memory_index.load_memory_documents()
-        memory_index.build_index()
-
-        query = input("🔍 Enter semantic memory query: ")
-        response = memory_index.query(query)
-        print("🧠 Best memory match:", response.response)
-    elif choice == "90":
-        from app.vector_memory import VectorMemoryEngine
-        engine = VectorMemoryEngine()
-        engine.build_index()
-
-        user_query = input("🔍 Ask the assistant something it should remember: ")
-        result = engine.query(user_query)
-        print("🧠 Memory response:", result.response)
-
+        os.system(f"python -m scripts.startup.main_voice profiles/{temp_profile}")
 
     elif choice == "0":
         print("👋 Exiting test menu.")
@@ -223,7 +213,6 @@ def show_dev_menu():
 
 def run_test_interaction():
     from app.core_assistant import get_response
-    from llm.query_assistant import load_index
     index = load_index()
     question = input("🧪 Enter test question: ")
     response = get_response(user_input=question, agent="core_assistant")

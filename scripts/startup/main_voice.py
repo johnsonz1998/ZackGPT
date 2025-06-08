@@ -4,15 +4,19 @@ import traceback
 import json
 import os
 import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
 from voice.whisper_listener import listen_until_silence, reload_whisper_model
-from llm.query_assistant import load_index, ask_gpt
-from llm.context_engine import analyze_context
+from app.query_utils import load_index, ask_gpt
+from app.context_engine import analyze_context
 from voice.elevenlabs import speak as eleven_speak
 from voice.tts_mac import speak as mac_speak
-from app.memory_engine import get_context_block
-from llm.prompt_builder import build_prompt
 from app.core_assistant import should_save_memory, maybe_save_memory
+from app.prompt_utils import build_prompt
+
+# Stub for get_context_block (legacy)
+def get_context_block(max_items):
+    return ""
 
 def get_speaker():
     return eleven_speak if config.USE_ELEVENLABS else mac_speak

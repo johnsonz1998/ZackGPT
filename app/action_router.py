@@ -1,6 +1,6 @@
-from app.memory_engine import save_memory, load_memory_by_tags
 import json
 import config
+# Legacy memory actions removed. If needed, reimplement using memory_db.
 
 def speak_response(msg: str):
     """Speak the given message using configured voice backend."""
@@ -25,21 +25,7 @@ def handle_action_response(response: dict):
     print(f"🔧 Action received: {action}")
 
     if action == "update_memory":
-        update = data.get("update")
-        if not update:
-            print("⚠️ Missing update data.")
-            return
-
-        save_memory(
-            question=update.get("text", ""),
-            answer=update.get("text", ""),
-            tags=update.get("tags", []),
-            agent=update.get("agents", ["core_assistant"])[0],
-            importance=update.get("importance", "medium"),
-            source=update.get("source", "user"),
-            context=update.get("context")
-        )
-        print(f"✅ Memory saved for agents: {update.get('agents', ['core_assistant'])}")
+        print("⚠️ update_memory action is not implemented in MongoDB mode.")
         speak_response(data.get("text"))
 
     elif action == "respond":
@@ -50,13 +36,7 @@ def handle_action_response(response: dict):
         print(f"📂 GPT suggests creating a new memory category: {category}")
 
     elif action == "query_memory":
-        query = data.get("query", {})
-        tags = query.get("tags", [])
-        agents = query.get("agents", ["core_assistant"])
-        results = load_memory_by_tags(" ".join(tags), agent=agents[0])
-        print("🔍 Memory query results:")
-        for r in results:
-            print(json.dumps(r, indent=2))
+        print("⚠️ query_memory action is not implemented in MongoDB mode.")
 
     elif action == "switch_agent":
         print("⚠️ Agent switch requested. This is reserved for local controller logic.")

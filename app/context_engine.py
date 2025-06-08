@@ -1,5 +1,5 @@
 import json
-from llm.local_llm import run_local_model
+from app.local_llm import run_local_model
 
 def analyze_context(input_text: str, memory_summary: str = "") -> dict:
     prompt = f"""

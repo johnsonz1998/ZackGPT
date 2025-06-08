@@ -8,7 +8,7 @@ from typing import List, Dict, Any, Optional
 from openai import OpenAI
 
 import config
-from app.debug_logger import debug_log, debug_info, debug_error, debug_warning
+from app.debug_logger import debug_log, debug_info, debug_error, debug_warning, debug_success
 
 @dataclass
 class MemoryScore:

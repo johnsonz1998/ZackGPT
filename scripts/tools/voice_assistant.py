@@ -109,7 +109,7 @@ try:
 
         try:
             custom_prompt = (
-                "You are Zach’s sarcastic AI assistant. Be short, helpful, and a little bit cocky.\n\n"
+                "You are Zach's sarcastic AI assistant. Be short, helpful, and a little bit cocky.\n\n"
                 f"User: {user_question}\nAssistant:"
             )
             response = ask_question(index, custom_prompt)
