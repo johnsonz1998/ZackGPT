@@ -85,15 +85,20 @@ function run_local() {
   pip install -r requirements.txt
 
   if [ -f .env ]; then
-    set -a
-    source .env 2>/dev/null
-    set +a
+    echo -e "\033[1;32m[+] Loading environment variables from .env\033[0m"
+    # Load only the OPENAI_API_KEY from .env
+    export OPENAI_API_KEY=$(grep OPENAI_API_KEY .env | cut -d '=' -f2-)
   else
     echo -e "\033[1;31m[!] No .env file found!\033[0m"
+    exit 1
   fi
 
   echo -e "\033[1;32m[+] Running $script locally...\033[0m"
-  python $script
+  if [[ "$script" == "scripts/startup/main.py" ]]; then
+    python -m scripts.startup.main
+  else
+    python -m scripts.startup.dev
+  fi
   deactivate
 }
 

@@ -14,8 +14,7 @@ ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 # ========== Core Toggles ==========
 USE_ELEVENLABS = os.getenv("USE_ELEVENLABS", "True") == "True"
 USE_WHISPER = os.getenv("USE_WHISPER", "True") == "True"
-# DEBUG_MODE = os.getenv("DEBUG_MODE", "False") == "True"
-DEBUG_MODE=True
+DEBUG_MODE = os.getenv("DEBUG_MODE", "False") == "True"
 
 # ========== Paths ==========
 BASE_DIR = Path(__file__).resolve().parent
@@ -40,7 +39,7 @@ LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4")
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", 0.7))  # For future dynamic control
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
 DEFAULT_PERSONALITY = os.getenv("DEFAULT_PERSONALITY", (
-    "You are Zack’s AI assistant. You are witty, sarcastic, and brutally efficient. "
+    "You are Zack's AI assistant. You are witty, sarcastic, and brutally efficient. "
     "Keep things short and smart. Never waste words."
 ))
 

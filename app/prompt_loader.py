@@ -1,24 +1,33 @@
 import os
+from pathlib import Path
 
-PROMPT_DIR = "prompts"
+# Point to /ZACKGPT/prompts instead of app/prompts
+PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 
 PROMPT_MAP = {
     "core_assistant": None  # can define overrides like "fin_assistant": "You are..."
 }
 
 def load_prompt(agent: str, variables: dict = None) -> str:
-    if agent in PROMPT_MAP and PROMPT_MAP[agent]:
-        prompt_template = PROMPT_MAP[agent]
-    else:
-        path = os.path.join(PROMPT_DIR, f"{agent}.txt")
-        if not os.path.exists(path):
-            raise FileNotFoundError(f"Prompt for agent '{agent}' not found in PROMPT_MAP or {path}")
-        with open(path, "r") as f:
-            prompt_template = f.read()
-
+    """
+    Load a prompt template for the specified agent and fill in any variables.
+    
+    Args:
+        agent: The name of the agent (e.g. 'core_assistant')
+        variables: Dictionary of variables to fill in the prompt template
+        
+    Returns:
+        The filled prompt template as a string
+    """
+    prompt_file = PROMPTS_DIR / f"{agent}.txt"
+    
+    if not prompt_file.exists():
+        raise FileNotFoundError(f"Prompt file not found: {prompt_file}")
+        
+    with open(prompt_file, 'r') as f:
+        prompt = f.read()
+        
     if variables:
-        for key, val in variables.items():
-            placeholder = f"{{{{{key}}}}}"
-            prompt_template = prompt_template.replace(placeholder, val.strip())
-
-    return prompt_template
+        prompt = prompt.format(**variables)
+        
+    return prompt

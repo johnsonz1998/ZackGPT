@@ -1,7 +1,10 @@
 # === Core ===
-openai==1.14.2
-requests==2.31.0
-python-dotenv==1.0.1
+openai>=1.0.0
+pymongo>=4.0.0
+python-dotenv>=0.19.0
+numpy>=1.21.0
+pydantic>=2.0.0
+typing-extensions>=4.0.0
 tqdm==4.66.2
 setuptools>=65.5.0
 wheel>=0.38.0
@@ -16,7 +19,6 @@ psutil==5.9.8
 # === LLM / Retrieval ===
 llama-index[core,llms-openai]==0.10.43
 faiss-cpu==1.8.0
-numpy==1.26.4
 webrtcvad==2.0.10
 
 # === Optional Dev Tools ===

@@ -1,28 +1,37 @@
-# ZackGPT Dockerfile
-FROM python:3.10-slim
+# Build stage for dependencies
+FROM python:3.10-slim as builder
 
 # Set working directory
+WORKDIR /build
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    git && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy and install Python dependencies
+COPY requirements.txt .
+RUN pip install --upgrade pip setuptools wheel && \
+    pip install "httpx<0.25.0" && \
+    pip install -r requirements.txt
+
+# Final stage
+FROM python:3.10-slim
+
 WORKDIR /app
 
-# Install system-level dependencies
+# Install runtime dependencies only
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libsndfile1 \
-    libportaudio2 \
-    build-essential \
-    git \
-    python3.10-dev \
-    libpython3.10-dev && \
+    libportaudio2 && \
     rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
-COPY requirements.txt .
-RUN echo '🔍 Installing Python requirements:' && \
-    cat requirements.txt && \
-    pip install --no-cache-dir --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir -r requirements.txt
+# Copy Python packages from builder
+COPY --from=builder /usr/local/lib/python3.10/site-packages/ /usr/local/lib/python3.10/site-packages/
 
-# Copy application source code
+# Copy application code
 COPY app/     ./app/
 COPY voice/   ./voice/
 COPY llm/     ./llm/

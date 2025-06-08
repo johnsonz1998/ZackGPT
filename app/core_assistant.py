@@ -3,7 +3,8 @@ import re
 import uuid
 from pathlib import Path
 from openai import OpenAI
-from app.vector_memory import VectorMemoryEngine
+from app.memory_database import MemoryDatabase
+from app.debug_logger import debug_log, debug_info, debug_error, debug_success
 
 import config
 from app.prompt_loader import load_prompt
@@ -16,7 +17,7 @@ from app.memory_engine import (
 
 client = OpenAI(api_key=config.OPENAI_API_KEY)
 
-_memory_engine = None
+_memory_db = None
 
 def summarize_memory_for_context(mem_entries, max_items=5):
     return "\n".join(
@@ -25,16 +26,19 @@ def summarize_memory_for_context(mem_entries, max_items=5):
     )
 
 def build_context(user_input: str, agent: str = "core_assistant") -> list:
-    global _memory_engine
-    if _memory_engine is None:
-        _memory_engine = VectorMemoryEngine()
-        _memory_engine.build_index()
+    global _memory_db
+    if _memory_db is None:
+        _memory_db = MemoryDatabase()
+        _memory_db.load_memories()
 
-    vector_result = _memory_engine.query(user_input, top_k=5)
+    # Get relevant memories using the new database
+    memory_context = _memory_db.get_memory_context(
+        query=user_input,
+        threshold=0.6,  # Adjust threshold as needed
+        top_k=5
+    )
 
-    memory_context = vector_result.response.strip() if hasattr(vector_result, "response") else ""
-    if config.DEBUG_MODE:
-        print("\n🔎 Vector memory result:\n", memory_context)
+    debug_info("Memory context retrieved", memory_context)
 
     short_term = get_context_block(config.MAX_CONTEXT_HISTORY)
 
@@ -47,79 +51,137 @@ def build_context(user_input: str, agent: str = "core_assistant") -> list:
     context += conversation_history[-config.MAX_CONTEXT_HISTORY:]
     context.append({"role": "user", "content": user_input})
 
-    if config.DEBUG_MODE:
-        for doc in vector_result.source_nodes:
-            print("📄 Match:", doc.metadata.get("question", ""), "| Tags:", doc.metadata.get("tags", []))
-
     return context
 
-def should_save_memory(question: str, answer: str) -> dict:
+def should_save_memory(question: str, answer: str) -> bool:
+    """
+    Determine if this interaction should be saved to memory.
+    Only saves if the answer is a direct, factual response that the assistant is 100% confident about.
+    """
+    # Skip if either question or answer is empty
+    if not question.strip() or not answer.strip():
+        return False
+        
+    # Skip if question is too short (likely a command or greeting)
+    if len(question.split()) < 3:
+        return False
+        
+    # Skip if answer is too short
+    if len(answer.split()) < 5:
+        return False
+        
+    # Skip if question contains common command patterns
+    command_patterns = [
+        r"^(hi|hello|hey|greetings)",
+        r"^(thanks|thank you)",
+        r"^(bye|goodbye|see you)",
+        r"^(help|what can you do)",
+        r"^(stop|exit|quit)"
+    ]
+    
+    for pattern in command_patterns:
+        if re.match(pattern, question.lower()):
+            return False
+            
+    # Skip if answer contains uncertainty markers
+    uncertainty_markers = [
+        "i think",
+        "i believe",
+        "probably",
+        "maybe",
+        "perhaps",
+        "i'm not sure",
+        "i don't know",
+        "i'm not certain",
+        "i guess",
+        "possibly",
+        "likely",
+        "might be",
+        "could be",
+        "seems like",
+        "appears to be"
+    ]
+    
+    answer_lower = answer.lower()
+    for marker in uncertainty_markers:
+        if marker in answer_lower:
+            debug_info("Skipping memory save - answer contains uncertainty", {
+                "marker": marker,
+                "answer": answer
+            })
+            return False
+            
+    # Skip if answer is a question or contains a question
+    if "?" in answer:
+        debug_info("Skipping memory save - answer contains a question", {
+            "answer": answer
+        })
+        return False
+        
+    return True
+
+def maybe_save_memory(question: str, answer: str, agent: str = "core_assistant") -> None:
+    """Save the interaction to memory if it meets the criteria."""
+    if not should_save_memory(question, answer):
+        debug_info("Skipping memory save - interaction doesn't meet criteria", {
+            "question": question,
+            "answer": answer
+        })
+        return
+        
     try:
-        result = client.chat.completions.create(
-            model="gpt-4-turbo",
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "If the exchange below contains information worth remembering, respond with:\n"
-                        "{\n  \"remember\": true,\n  \"memory\": {\n    \"question\": string,\n    \"answer\": string,\n    \"tags\": list,\n    \"importance\": string,\n    \"context\": string,\n    \"source\": \"user\",\n    \"agents\": [\"core_assistant\"]\n  }\n}\n"
-                        "Otherwise, respond with: { \"remember\": false }"
-                    )
-                },
-                {
-                    "role": "user",
-                    "content": f"Question: {question}\nAnswer: {answer}"
-                }
-            ],
-            temperature=0.2
+        save_memory(
+            question=question,
+            answer=answer,
+            agent=agent,
+            importance="high"  # Only save high-confidence memories
         )
+        debug_success("Saved interaction to memory", {
+            "question": question,
+            "answer": answer,
+            "agent": agent
+        })
+    except Exception as e:
+        debug_error("Failed to save memory", e)
 
-        content = result.choices[0].message.content.strip()
-        if config.DEBUG_MODE:
-            print("\n\U0001f9e0 RAW MEMORY DECISION STRING:\n", content)
-
-        parsed = json.loads(content)
-        memory = parsed.get("memory")
-
-        if config.DEBUG_MODE:
-            print("\n[AI Memory Decision Parsed JSON]:")
-            print(json.dumps(parsed, indent=2))
-
-        if parsed.get("remember") is True and memory:
-            required_keys = ["question", "answer", "tags", "context", "importance", "source", "agents"]
-            if all(k in memory for k in required_keys):
-                memory["id"] = re.sub(r'[^a-zA-Z0-9_-]', '_', memory.get("id") or str(uuid.uuid4()))
-                return memory
-            else:
-                if config.DEBUG_MODE:
-                    print("⚠️ Skipping malformed memory:", memory)
-        return None
-
-    except Exception:
-        if config.DEBUG_MODE:
-            import traceback
-            print("⚠️ Memory decision failed:")
-            traceback.print_exc()
-        return None
-
-def maybe_save_memory(question, answer, tags=None, agent="core_assistant"):
-    if config.MEMORY_MODE == "all":
-        if config.DEBUG_MODE:
-            print("💾 Saving unconditionally (all mode)")
-        save_memory(question=question, answer=answer, tags=tags, agent=agent)
-    elif config.MEMORY_MODE == "ai":
-        full = should_save_memory(question, answer)
-        if full:
-            if config.DEBUG_MODE:
-                print("💾 Saving memory from AI decision")
-            save_memory(
-                question=full["question"],
-                answer=full["answer"],
-                tags=full.get("tags", []),
-                importance=full.get("importance", "medium"),
-                context=full.get("context"),
-                agent=agent
-            )
+def process_input(user_input: str, agent: str = "core_assistant") -> str:
+    """Process user input and return the assistant's response."""
+    try:
+        # Check for memory correction
+        if user_input.lower().startswith("correction:"):
+            parts = user_input[len("correction:"):].strip().split("|")
+            if len(parts) >= 2:
+                memory_id = parts[0].strip()
+                correction = parts[1].strip()
+                if update_memory(memory_id, {"answer": correction}):
+                    return f"Memory updated: {correction}"
+                else:
+                    return "Failed to update memory"
+        
+        context = build_context(user_input, agent)
+        
+        debug_info("Sending request to OpenAI", {
+            "model": config.OPENAI_MODEL,
+            "context_length": len(context)
+        })
+        
+        response = client.chat.completions.create(
+            model=config.OPENAI_MODEL,
+            messages=context,
+            temperature=0.7,
+            max_tokens=1000
+        )
+        
+        answer = response.choices[0].message.content.strip()
+        
+        # Save to memory if appropriate
+        maybe_save_memory(user_input, answer, agent)
+        
+        return answer
+        
+    except Exception as e:
+        debug_error("Error processing input", e)
+        return "I encountered an error processing your request. Please try again."
 
 def generate_response(user_input: str, agent: str = "core_assistant") -> str:
     messages = build_context(user_input, agent)
