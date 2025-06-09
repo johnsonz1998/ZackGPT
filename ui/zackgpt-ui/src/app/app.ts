@@ -14,19 +14,21 @@ import { Thread } from './services/api.service';
 })
 export class AppComponent {
   title = 'ZackGPT UI';
-  currentView: 'dashboard' | 'settings' = 'dashboard';
+  activeTab: 'chat' | 'settings' = 'chat';
   selectedThread: Thread | null = null;
+  connected = false;
 
   onThreadSelected(thread: Thread): void {
     this.selectedThread = thread;
-    this.currentView = 'dashboard';
+    this.activeTab = 'chat';
   }
 
-  showSettings(): void {
-    this.currentView = 'settings';
+  onThreadCreated(thread: Thread): void {
+    this.selectedThread = thread;
+    this.activeTab = 'chat';
   }
 
-  showDashboard(): void {
-    this.currentView = 'dashboard';
+  setActiveTab(tab: 'chat' | 'settings'): void {
+    this.activeTab = tab;
   }
 }

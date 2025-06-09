@@ -48,12 +48,12 @@ fi
 
 # Check if backend is running
 echo -e "${YELLOW}🔍 Checking if ZackGPT backend is running...${NC}"
-if curl -s http://localhost:8000/api/stats > /dev/null 2>&1; then
+if curl -s http://localhost:8000/ > /dev/null 2>&1; then
     echo -e "${GREEN}✅ Backend is running and accessible${NC}"
 else
     echo -e "${YELLOW}⚠️  Backend doesn't seem to be running on port 8000${NC}"
-    echo -e "${YELLOW}   You may need to start the ZackGPT backend first${NC}"
-    echo -e "${YELLOW}   Run: ./zackgpt.sh${NC}"
+    echo -e "${YELLOW}   💡 For easy startup, use: ./zackgpt_web.sh (starts both backend & frontend)${NC}"
+    echo -e "${YELLOW}   Or manually start backend: ./zackgpt.sh${NC}"
 fi
 
 # Start the development server

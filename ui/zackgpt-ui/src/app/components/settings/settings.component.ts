@@ -22,8 +22,13 @@ export class SettingsComponent implements OnInit {
     max_memory_entries: 1000,
     evolution_enabled: true,
     evolution_frequency: 10,
+    web_search_enabled: true,
+    web_search_max_results: 5,
     openai_api_key_masked: '***masked***',
     elevenlabs_api_key_masked: '***masked***',
+    serpapi_key_masked: '',
+    google_api_key_masked: '',
+    google_cse_id_masked: '',
     debug_mode: false,
     log_level: 'INFO'
   };
@@ -32,6 +37,16 @@ export class SettingsComponent implements OnInit {
   loading = false;
   saving = false;
   isDirty = false;
+
+  // API Key management
+  apiKeys = {
+    openai_api_key: '',
+    elevenlabs_api_key: '',
+    serpapi_key: '',
+    google_api_key: '',
+    google_cse_id: ''
+  };
+  apiKeysChanged = false;
 
   // Dropdown options
   logLevels = ['DEBUG', 'INFO', 'WARNING', 'ERROR'];
@@ -62,16 +77,68 @@ export class SettingsComponent implements OnInit {
 
   saveConfig(): void {
     this.saving = true;
+    
+    // Save config first
     this.apiService.updateConfig(this.config).subscribe({
       next: (updatedConfig) => {
         this.config = updatedConfig;
         this.originalConfig = { ...updatedConfig };
-        this.saving = false;
-        this.isDirty = false;
-        console.log('Config saved successfully');
+        
+        // If API keys have changed, save them too
+        if (this.apiKeysChanged) {
+          this.saveApiKeysInternal();
+        } else {
+          this.saving = false;
+          this.isDirty = false;
+          console.log('Config saved successfully');
+        }
       },
       error: (error) => {
         console.error('Failed to save config:', error);
+        this.saving = false;
+      }
+    });
+  }
+
+  private saveApiKeysInternal(): void {
+    // Only send non-empty keys
+    const keysToUpdate: {[key: string]: string} = {};
+    Object.entries(this.apiKeys).forEach(([key, value]) => {
+      if (value && value.trim()) {
+        keysToUpdate[key] = value.trim();
+      }
+    });
+
+    if (Object.keys(keysToUpdate).length === 0) {
+      this.saving = false;
+      this.isDirty = false;
+      this.apiKeysChanged = false;
+      return;
+    }
+
+    this.apiService.updateApiKeys(keysToUpdate).subscribe({
+      next: (response) => {
+        this.saving = false;
+        this.isDirty = false;
+        this.apiKeysChanged = false;
+        if (response.success) {
+          console.log('Config and API keys saved successfully');
+          // Clear the API key fields after successful save
+          this.apiKeys = {
+            openai_api_key: '',
+            elevenlabs_api_key: '',
+            serpapi_key: '',
+            google_api_key: '',
+            google_cse_id: ''
+          };
+          // Reload config to show updated masked keys
+          this.loadConfig();
+        } else {
+          console.error('Failed to update API keys:', response.message);
+        }
+      },
+      error: (error) => {
+        console.error('Error updating API keys:', error);
         this.saving = false;
       }
     });
@@ -98,6 +165,14 @@ export class SettingsComponent implements OnInit {
 
   discardChanges(): void {
     this.config = { ...this.originalConfig };
+    this.apiKeys = {
+      openai_api_key: '',
+      elevenlabs_api_key: '',
+      serpapi_key: '',
+      google_api_key: '',
+      google_cse_id: ''
+    };
+    this.apiKeysChanged = false;
     this.isDirty = false;
   }
 
@@ -106,7 +181,9 @@ export class SettingsComponent implements OnInit {
   }
 
   private checkIfDirty(): void {
-    this.isDirty = JSON.stringify(this.config) !== JSON.stringify(this.originalConfig);
+    const configChanged = JSON.stringify(this.config) !== JSON.stringify(this.originalConfig);
+    const apiKeysHaveValues = Object.values(this.apiKeys).some(value => value && value.trim());
+    this.isDirty = configChanged || apiKeysHaveValues;
   }
 
   // Validation helpers
@@ -130,6 +207,19 @@ export class SettingsComponent implements OnInit {
     return this.isValidTemperature() && 
            this.isValidMaxTokens() && 
            this.isValidMemoryEntries() && 
-           this.isValidEvolutionFreq();
+           this.isValidEvolutionFreq() &&
+           this.isValidWebSearchResults();
   }
+
+  isValidWebSearchResults(): boolean {
+    return this.config.web_search_max_results > 0 && this.config.web_search_max_results <= 20;
+  }
+
+  // API Key management methods
+  onApiKeyChange(): void {
+    this.apiKeysChanged = true;
+    this.checkIfDirty();
+  }
+
+
 } 

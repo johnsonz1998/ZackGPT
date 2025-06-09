@@ -53,6 +53,7 @@ class Thread(BaseModel):
 class SendMessageRequest(BaseModel):
     content: str
     thread_id: str
+    force_web_search: bool = False
 
 class CreateThreadRequest(BaseModel):
     title: str
@@ -80,8 +81,18 @@ class ZackGPTConfig(BaseModel):
     max_memory_entries: int
     evolution_enabled: bool
     evolution_frequency: int
+    
+    # Web Search Settings
+    web_search_enabled: bool
+    web_search_max_results: int
+    
+    # API Keys (masked for security)
     openai_api_key_masked: str
     elevenlabs_api_key_masked: str
+    serpapi_key_masked: str
+    google_api_key_masked: str
+    google_cse_id_masked: str
+    
     debug_mode: bool
     log_level: str
 
@@ -284,9 +295,14 @@ async def send_message(thread_id: str, request: SendMessageRequest):
         )
         thread_manager.add_message(user_message)
         
-        # Get AI response
+        # Get AI response with optional web search
         assistant = get_assistant(thread_id)
-        ai_response = assistant.process_input(request.content)
+        if request.force_web_search:
+            # Force web search by modifying the input to trigger search
+            search_input = f"[WEB_SEARCH_FORCED] {request.content}"
+            ai_response = assistant.process_input(search_input)
+        else:
+            ai_response = assistant.process_input(request.content)
         
         # Create assistant message
         assistant_message = ChatMessage(
@@ -330,6 +346,12 @@ async def get_config():
     """Get current configuration."""
     from config import config
     
+    # Helper function to mask API keys
+    def mask_key(key_value):
+        if not key_value:
+            return ''
+        return f"{'*' * max(0, len(str(key_value)) - 8)}{str(key_value)[-4:] if len(str(key_value)) > 4 else '***'}"
+    
     return ZackGPTConfig(
         model_name=getattr(config, 'LLM_MODEL', 'gpt-4'),
         max_tokens=getattr(config, 'MAX_TOKENS', 2000),
@@ -341,8 +363,18 @@ async def get_config():
         max_memory_entries=getattr(config, 'MAX_MEMORY_ENTRIES', 1000),
         evolution_enabled=getattr(config, 'EVOLUTION_ENABLED', True),
         evolution_frequency=getattr(config, 'EVOLUTION_FREQUENCY', 10),
-        openai_api_key_masked='***masked***',
-        elevenlabs_api_key_masked='***masked***',
+        
+        # Web Search Settings
+        web_search_enabled=getattr(config, 'WEB_SEARCH_ENABLED', False),
+        web_search_max_results=getattr(config, 'WEB_SEARCH_MAX_RESULTS', 5),
+        
+        # API Keys (masked)
+        openai_api_key_masked=mask_key(getattr(config, 'OPENAI_API_KEY', '')),
+        elevenlabs_api_key_masked=mask_key(getattr(config, 'ELEVENLABS_API_KEY', '')),
+        serpapi_key_masked=mask_key(getattr(config, 'SERPAPI_KEY', '')),
+        google_api_key_masked=mask_key(getattr(config, 'GOOGLE_API_KEY', '')),
+        google_cse_id_masked=mask_key(getattr(config, 'GOOGLE_CSE_ID', '')),
+        
         debug_mode=getattr(config, 'DEBUG_MODE', False),
         log_level=getattr(config, 'LOG_LEVEL', 'INFO')
     )
@@ -350,13 +382,70 @@ async def get_config():
 @app.patch("/config", response_model=ZackGPTConfig)
 async def update_config(updates: Dict[str, Any]):
     """Update configuration (partial update)."""
-    # Note: This is a simplified implementation
-    # In a real system, you'd want to persist these changes
-    debug_info("Config update requested", updates)
+    debug_info("Config update requested", {"keys": list(updates.keys())})
     
     # For now, just return the current config
-    # TODO: Implement actual config updates
+    # TODO: Implement actual config updates to environment variables or config file
     return await get_config()
+
+@app.post("/config/api-keys")
+async def update_api_keys(api_keys: Dict[str, str]):
+    """Update API keys securely."""
+    import os
+    from pathlib import Path
+    
+    debug_info("API keys update requested", {"keys": list(api_keys.keys())})
+    
+    # Define the .env file path
+    env_file = Path(".env")
+    
+    try:
+        # Read existing .env file or create new content
+        env_content = {}
+        if env_file.exists():
+            with open(env_file, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#') and '=' in line:
+                        key, value = line.split('=', 1)
+                        env_content[key.strip()] = value.strip()
+        
+        # Update with new API keys
+        key_mapping = {
+            'serpapi_key': 'SERPAPI_KEY',
+            'google_api_key': 'GOOGLE_API_KEY',
+            'google_cse_id': 'GOOGLE_CSE_ID',
+            'openai_api_key': 'OPENAI_API_KEY',
+            'elevenlabs_api_key': 'ELEVENLABS_API_KEY'
+        }
+        
+        updated_keys = []
+        for frontend_key, env_key in key_mapping.items():
+            if frontend_key in api_keys and api_keys[frontend_key].strip():
+                env_content[env_key] = api_keys[frontend_key].strip()
+                updated_keys.append(env_key)
+                # Also update the current environment
+                os.environ[env_key] = api_keys[frontend_key].strip()
+        
+        # Write back to .env file
+        with open(env_file, 'w') as f:
+            for key, value in env_content.items():
+                f.write(f"{key}={value}\n")
+        
+        debug_info("API keys updated successfully", {"updated_keys": updated_keys})
+        
+        return {
+            "success": True,
+            "message": f"Updated {len(updated_keys)} API keys successfully",
+            "updated_keys": updated_keys
+        }
+        
+    except Exception as e:
+        debug_error("Failed to update API keys", {"error": str(e)})
+        return {
+            "success": False,
+            "message": f"Failed to update API keys: {str(e)}"
+        }
 
 @app.post("/config/reset", response_model=ZackGPTConfig)
 async def reset_config():
@@ -386,6 +475,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
             if action == "send_message":
                 thread_id = message_data.get("thread_id")
                 content = message_data.get("content")
+                force_web_search = message_data.get("force_web_search", False)
                 
                 if not thread_id or not content:
                     await websocket.send_text(json.dumps({
@@ -415,9 +505,14 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                         "typing": True
                     }))
                     
-                    # Get AI response
+                    # Get AI response with optional web search
                     assistant = get_assistant(thread_id)
-                    ai_response = assistant.process_input(content)
+                    if force_web_search:
+                        # Force web search by modifying the input to trigger search
+                        search_input = f"[WEB_SEARCH_FORCED] {content}"
+                        ai_response = assistant.process_input(search_input)
+                    else:
+                        ai_response = assistant.process_input(content)
                     
                     # Create assistant message
                     assistant_message = ChatMessage(

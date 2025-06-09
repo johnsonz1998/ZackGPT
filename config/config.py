@@ -85,3 +85,12 @@ PROMPT_ENHANCER_DEBUG = os.getenv("PROMPT_ENHANCER_DEBUG", "false").lower() == "
 PROMPT_SYSTEM_ENABLED = os.getenv("PROMPT_SYSTEM_ENABLED", "true").lower() == "true"
 PROMPT_EVOLUTION_ENABLED = os.getenv("PROMPT_EVOLUTION_ENABLED", "true").lower() == "true"
 PROMPT_EVOLUTION_RATE = float(os.getenv("PROMPT_EVOLUTION_RATE", "0.3"))  # 30% evolution chance
+
+# ========== Web Search Configuration ==========
+WEB_SEARCH_ENABLED = os.getenv("WEB_SEARCH_ENABLED", "True").lower() == "true"
+SERPAPI_KEY = os.getenv("SERPAPI_KEY")  # Primary search API
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")  # Fallback
+GOOGLE_CSE_ID = os.getenv("GOOGLE_CSE_ID")  # Custom Search Engine ID
+WEB_SEARCH_MAX_RESULTS = int(os.getenv("WEB_SEARCH_MAX_RESULTS", "5"))
+WEB_SEARCH_TIMEOUT = int(os.getenv("WEB_SEARCH_TIMEOUT", "10"))
+USER_AGENT = os.getenv("USER_AGENT", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")

@@ -4,29 +4,35 @@ ZackGPT now supports both CLI and Web interfaces! The web interface provides a m
 
 ## 🚀 Quick Start
 
-### 1. Start the Backend API Server
+### Option 1: One-Command Launch (Recommended)
 
 ```bash
-# Option 1: Use the dedicated web launcher (recommended)
+# Starts both backend and frontend together
 ./zackgpt_web.sh
+```
 
-# Option 2: Use the main launcher
+### Option 2: Manual Launch
+
+#### 1. Start the Backend API Server
+
+```bash
+# Use the main launcher
 ./zackgpt.sh
 # Choose option 2 (Web Mode) or 3 (Hybrid Mode)
 
-# Option 3: Direct Python execution
+# Or direct Python execution
 python -m scripts.startup.main_web
 ```
 
-### 2. Start the Frontend
+#### 2. Start the Frontend (in a separate terminal)
 
 ```bash
 cd ui/zackgpt-ui
 npm install    # First time only
-npm start
+npm start -- --host 0.0.0.0
 ```
 
-### 3. Access the Application
+### Access the Application
 
 - **Frontend UI**: http://localhost:4200
 - **Backend API**: http://localhost:8000

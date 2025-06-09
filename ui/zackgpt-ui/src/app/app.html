@@ -1,46 +1,56 @@
 <div class="app-layout">
   <!-- Sidebar -->
   <div class="sidebar">
-    <!-- Navigation Header -->
     <div class="sidebar-header">
       <div class="logo">
-        <h1>🤖 ZackGPT</h1>
+        <div class="logo-container">
+          <img src="logo.svg" alt="ZackGPT" class="logo-icon" />
+          <h1>ZackGPT</h1>
+        </div>
       </div>
       
       <nav class="main-nav">
         <button 
-          class="nav-btn" 
-          [class.active]="currentView === 'dashboard'"
-          (click)="showDashboard()">
+          class="nav-btn"
+          [ngClass]="{'active': activeTab === 'chat'}"
+          (click)="setActiveTab('chat')">
           <span class="icon">💬</span>
-          Chat
+          <span>Chat</span>
         </button>
         
         <button 
-          class="nav-btn" 
-          [class.active]="currentView === 'settings'"
-          (click)="showSettings()">
+          class="nav-btn"
+          [ngClass]="{'active': activeTab === 'settings'}"
+          (click)="setActiveTab('settings')">
           <span class="icon">⚙️</span>
-          Settings
+          <span>Settings</span>
         </button>
       </nav>
     </div>
-
-    <!-- Threads List (only shown in dashboard view) -->
-    <div class="threads-section" *ngIf="currentView === 'dashboard'">
-      <app-threads (threadSelected)="onThreadSelected($event)"></app-threads>
+    
+    <!-- Threads Section (only show in chat mode) -->
+    <div class="threads-section" *ngIf="activeTab === 'chat'">
+      <app-threads 
+        (threadSelected)="onThreadSelected($event)">
+      </app-threads>
     </div>
+    
+    <!-- Filler to extend sidebar when threads are hidden -->
+    <div class="sidebar-filler" *ngIf="activeTab !== 'chat'"></div>
   </div>
 
-  <!-- Main Content -->
+  <!-- Main Content Area -->
   <div class="main-content">
+    <!-- Chat Dashboard -->
     <app-dashboard 
-      *ngIf="currentView === 'dashboard'" 
-      [selectedThread]="selectedThread">
+      *ngIf="activeTab === 'chat'"
+      [selectedThread]="selectedThread"
+      (threadCreated)="onThreadCreated($event)">
     </app-dashboard>
     
+    <!-- Settings -->
     <app-settings 
-      *ngIf="currentView === 'settings'">
+      *ngIf="activeTab === 'settings'">
     </app-settings>
   </div>
 </div>

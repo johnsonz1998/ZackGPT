@@ -64,9 +64,16 @@ export interface ZackGPTConfig {
   evolution_enabled: boolean;
   evolution_frequency: number;
   
+  // Web Search Settings
+  web_search_enabled: boolean;
+  web_search_max_results: number;
+  
   // API Keys (masked for security)
   openai_api_key_masked: string;
   elevenlabs_api_key_masked: string;
+  serpapi_key_masked: string;
+  google_api_key_masked: string;
+  google_cse_id_masked: string;
   
   // Other settings
   debug_mode: boolean;
@@ -135,6 +142,10 @@ export class ZackgptApiService {
 
   resetConfig(): Observable<ZackGPTConfig> {
     return this.http.post<ZackGPTConfig>(`${this.apiUrl}/config/reset`, {});
+  }
+
+  updateApiKeys(apiKeys: {[key: string]: string}): Observable<{success: boolean, message: string, updated_keys?: string[]}> {
+    return this.http.post<{success: boolean, message: string, updated_keys?: string[]}>(`${this.apiUrl}/config/api-keys`, apiKeys);
   }
 
   // WebSocket Methods

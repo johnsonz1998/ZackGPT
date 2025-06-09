@@ -17,6 +17,7 @@ export interface Thread {
   created_at: string;
   updated_at: string;
   message_count: number;
+  isDraft?: boolean;
 }
 
 export interface HealthStatus {
@@ -36,6 +37,23 @@ export interface SystemStats {
   total_messages: number;
   evolution_stats: any;
   memory_stats: any;
+}
+
+export interface ZackGPTConfig {
+  model_name: string;
+  max_tokens: number;
+  temperature: number;
+  voice_enabled: boolean;
+  voice_model: string;
+  tts_voice: string;
+  memory_enabled: boolean;
+  max_memory_entries: number;
+  evolution_enabled: boolean;
+  evolution_frequency: number;
+  openai_api_key_masked: string;
+  elevenlabs_api_key_masked: string;
+  debug_mode: boolean;
+  log_level: string;
 }
 
 @Injectable({
@@ -136,10 +154,11 @@ export class ApiService {
       );
   }
 
-  sendMessage(threadId: string, content: string): Observable<ChatMessage> {
+  sendMessage(threadId: string, content: string, forceWebSearch?: boolean): Observable<ChatMessage> {
     return this.http.post<ChatMessage>(`${this.baseUrl}/threads/${threadId}/messages`, {
       content,
-      thread_id: threadId
+      thread_id: threadId,
+      force_web_search: forceWebSearch || false
     }).pipe(
       catchError(this.handleError.bind(this))
     );
@@ -219,19 +238,20 @@ export class ApiService {
     }
   }
 
-  sendMessageViaWebSocket(threadId: string, content: string): void {
+  sendMessageViaWebSocket(threadId: string, content: string, forceWebSearch?: boolean): void {
     if (this.websocket?.readyState === WebSocket.OPEN) {
       const message = {
         action: 'send_message',
         thread_id: threadId,
-        content: content
+        content: content,
+        force_web_search: forceWebSearch || false
       };
       
       this.websocket.send(JSON.stringify(message));
     } else {
       this.errors$.next('WebSocket not connected');
       // Fallback to REST API
-      this.sendMessage(threadId, content).subscribe({
+      this.sendMessage(threadId, content, forceWebSearch).subscribe({
         next: (response) => this.messages$.next(response),
         error: (error) => this.errors$.next(error)
       });
@@ -271,6 +291,14 @@ export class ApiService {
 
   getSystemStats(): Observable<SystemStats> {
     return this.http.get<SystemStats>(`${this.baseUrl}/stats`)
+      .pipe(
+        retry(2),
+        catchError(this.handleError.bind(this))
+      );
+  }
+
+  getConfig(): Observable<ZackGPTConfig> {
+    return this.http.get<ZackGPTConfig>(`${this.baseUrl}/config`)
       .pipe(
         retry(2),
         catchError(this.handleError.bind(this))

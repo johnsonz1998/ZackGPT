@@ -89,6 +89,20 @@ export class ThreadsComponent implements OnInit, OnDestroy {
     this.threadSelected.emit(thread);
   }
 
+  createNewChat(): void {
+    // Create a draft/temporary thread that will be created on first message
+    const draftThread: Thread = {
+      id: `draft-${Date.now()}`,
+      title: '',
+      message_count: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      isDraft: true
+    };
+    
+    this.selectThread(draftThread);
+  }
+
   startCreatingThread(): void {
     this.isCreatingThread = true;
     this.newThreadName = '';
@@ -189,5 +203,10 @@ export class ThreadsComponent implements OnInit, OnDestroy {
 
   trackThread(index: number, thread: Thread): string {
     return thread.id;
+  }
+
+  addNewThread(thread: Thread): void {
+    // Add thread to the beginning of the list and update the UI
+    this.threads.unshift(thread);
   }
 } 

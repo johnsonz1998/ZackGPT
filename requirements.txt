@@ -31,6 +31,11 @@ faiss-cpu==1.7.4
 webrtcvad==2.0.10
 tiktoken==0.5.2
 
+# === Web Search ===
+requests==2.31.0
+beautifulsoup4==4.12.3
+lxml==4.9.4
+
 # === Optional Dev Tools ===
 # rich==13.7.0
 # watchdog==4.0.0

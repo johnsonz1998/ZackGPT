@@ -10,6 +10,7 @@ from config import config
 from app.prompt_utils import load_prompt
 import tiktoken
 from app.prompt_builder import EvolutionaryPromptBuilder
+from app.web_search import search_web, get_webpage_content, WEB_SEARCH_ENABLED
 
 class ConversationManager:
     def __init__(self, max_tokens=4000, max_messages=10):
@@ -198,8 +199,98 @@ class CoreAssistant:
             return 'creation'
         elif any(word in user_lower for word in ["remember", "recall", "my", "save"]):
             return 'memory'
+        elif self._needs_web_search(user_input):
+            return 'web_search'
         else:
             return 'general'
+    
+    def _needs_web_search(self, user_input: str) -> bool:
+        """Determine if the user input requires web search."""
+        if not WEB_SEARCH_ENABLED:
+            return False
+            
+        user_lower = user_input.lower()
+        
+        # Current events and news
+        time_indicators = ["today", "now", "current", "latest", "recent", "new", "breaking"]
+        news_keywords = ["news", "happening", "events", "updates", "reports"]
+        
+        # Specific information requests
+        search_triggers = [
+            "search for", "look up", "find information", "tell me about",
+            "what is", "who is", "when did", "where is", "how much",
+            "price of", "cost of", "weather", "stock", "exchange rate"
+        ]
+        
+        # Real-time data requests
+        realtime_keywords = ["weather", "temperature", "forecast", "stock price", 
+                           "exchange rate", "cryptocurrency", "bitcoin", "score"]
+        
+        # Check for explicit search requests
+        if any(trigger in user_lower for trigger in search_triggers):
+            return True
+            
+        # Check for current events
+        if any(indicator in user_lower for indicator in time_indicators) and \
+           any(keyword in user_lower for keyword in news_keywords):
+            return True
+            
+        # Check for real-time data
+        if any(keyword in user_lower for keyword in realtime_keywords):
+            return True
+            
+        # Check for specific years (current events)
+        import datetime
+        current_year = datetime.datetime.now().year
+        recent_years = [str(year) for year in range(current_year - 2, current_year + 1)]
+        if any(year in user_input for year in recent_years):
+            return True
+            
+        return False
+    
+    def _perform_web_search(self, user_input: str) -> str:
+        """Perform web search and return results."""
+        try:
+            debug_info("Performing web search", {"query": user_input})
+            
+            # Extract search query from user input
+            search_query = self._extract_search_query(user_input)
+            
+            # Perform the search
+            search_results = search_web(search_query, max_results=5)
+            
+            debug_info("Web search completed", {
+                "query": search_query,
+                "results_length": len(search_results)
+            })
+            
+            return search_results
+            
+        except Exception as e:
+            debug_error("Web search failed", {"error": str(e)})
+            return f"I apologize, but I couldn't search the web right now. Error: {str(e)}"
+    
+    def _extract_search_query(self, user_input: str) -> str:
+        """Extract the actual search query from user input."""
+        user_lower = user_input.lower()
+        
+        # Remove common prefixes
+        prefixes_to_remove = [
+            "search for ", "look up ", "find information about ",
+            "tell me about ", "what is ", "who is ", "when did ",
+            "where is ", "how much ", "price of ", "cost of "
+        ]
+        
+        query = user_input
+        for prefix in prefixes_to_remove:
+            if user_lower.startswith(prefix):
+                query = user_input[len(prefix):]
+                break
+        
+        # Clean up the query
+        query = query.strip().strip("?").strip()
+        
+        return query if query else user_input
     
     def _assess_response_quality_ai(self, response: str, user_input: str, conversation_context: Dict) -> Dict:
         """AI-powered response quality assessment."""
@@ -333,8 +424,31 @@ class CoreAssistant:
                 "context_length": len(short_term_context)
             })
             
-            # Build context
+            # Check for forced web search
+            force_web_search = user_input.startswith("[WEB_SEARCH_FORCED]")
+            if force_web_search:
+                # Remove the force flag and get the actual query
+                user_input = user_input.replace("[WEB_SEARCH_FORCED]", "").strip()
+                debug_info("Forced web search detected", {"original_query": user_input})
+            
+            # Check if web search is needed (either forced or automatic)
+            search_results = ""
+            if force_web_search or self._needs_web_search(user_input):
+                search_results = self._perform_web_search(user_input)
+                debug_info("Web search completed", {
+                    "query": user_input,
+                    "forced": force_web_search,
+                    "results_preview": search_results[:200] + "..." if len(search_results) > 200 else search_results
+                })
+            
+            # Build context (including search results if available)
             context = self.build_context(user_input)
+            
+            # Add search results to context if available
+            if search_results:
+                search_context = f"\n\nWeb Search Results:\n{search_results}\n\nPlease use this information to provide a comprehensive and up-to-date answer."
+                if context and context[-1]["role"] == "user":
+                    context[-1]["content"] += search_context
             
             # Log (context, prompt) pair for future training
             debug_log("LLM prompt context", context)
@@ -359,7 +473,8 @@ class CoreAssistant:
                 'recent_errors': self._count_recent_errors(),
                 'user_expertise': self._assess_user_expertise(),
                 'conversation_type': self._classify_conversation_type(user_input),
-                'task_complexity': 'complex' if len(user_input) > 100 else 'simple'
+                'task_complexity': 'complex' if len(user_input) > 100 else 'simple',
+                'used_web_search': bool(search_results)
             }
             quality_assessment = self._assess_response_quality_ai(answer, user_input, conversation_context)
             self.prompt_builder.record_response_feedback(
@@ -370,7 +485,8 @@ class CoreAssistant:
             debug_info("Generated response", {
                 "response_length": len(answer),
                 "ai_quality_score": quality_assessment.get("overall_score"),
-                "ai_assessment_issues": quality_assessment.get("issues", [])
+                "ai_assessment_issues": quality_assessment.get("issues", []),
+                "used_web_search": bool(search_results)
             })
             
             # Maybe save to memory

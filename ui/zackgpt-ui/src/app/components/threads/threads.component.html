@@ -1,91 +1,77 @@
 <div class="threads-container">
   <div class="threads-header">
-    <h2>💬 Chat Threads</h2>
-    <button class="btn btn-primary btn-sm" (click)="startCreatingThread()" [disabled]="isCreatingThread || !connected">
+    <button class="new-chat-btn" (click)="createNewChat()" [disabled]="isCreatingThread">
       <span class="icon">+</span>
-      New Thread
+      New chat
     </button>
   </div>
 
   <!-- Error Display -->
-  <div class="error-message" *ngIf="error">
-    <span class="error-icon">⚠️</span>
-    <span>{{ error }}</span>
-    <button class="error-retry" (click)="retry()">Retry</button>
-    <button class="error-close" (click)="clearError()">×</button>
+  <div class="error-state" *ngIf="error">
+    <p>{{ error }}</p>
+    <button class="retry-btn" (click)="retry()">Retry</button>
   </div>
 
   <!-- Connection Status -->
-  <div class="connection-status" *ngIf="!connected && !loading">
-    <span class="status-icon">🔌</span>
-    <span>Not connected to backend</span>
+  <div class="connection-status disconnected" *ngIf="!connected && !loading">
+    Backend disconnected
+  </div>
+  
+  <div class="connection-status connected" *ngIf="connected">
+    Connected
   </div>
 
-  <div class="new-thread-form" *ngIf="isCreatingThread">
+  <!-- Thread Creator -->
+  <div class="thread-creator" *ngIf="isCreatingThread">
     <input
       id="newThreadInput"
       type="text"
       [(ngModel)]="newThreadName"
       (keyup)="onKeyPress($event)"
       placeholder="Enter thread name..."
-      class="thread-name-input">
-    <div class="form-actions">
-      <button class="btn btn-primary btn-xs" (click)="createThread()" [disabled]="!newThreadName.trim()">
+      class="creator-input">
+    <div class="creator-actions">
+      <button class="btn create-btn" (click)="createThread()" [disabled]="!newThreadName.trim()">
         Create
       </button>
-      <button class="btn btn-secondary btn-xs" (click)="cancelCreatingThread()">
+      <button class="btn cancel-btn" (click)="cancelCreatingThread()">
         Cancel
       </button>
     </div>
   </div>
 
-  <div class="loading-indicator" *ngIf="loading">
-    <div class="spinner-sm"></div>
-    <span>Loading threads...</span>
+  <!-- Loading State -->
+  <div class="loading-state" *ngIf="loading">
+    Loading threads...
   </div>
 
+  <!-- Threads List -->
   <div class="threads-list" *ngIf="!loading">
-    <div class="empty-state" *ngIf="threads.length === 0 && connected">
-      <div class="empty-icon">💭</div>
-      <h3>No conversations yet</h3>
-      <p>Start a new thread to begin chatting with ZackGPT</p>
-      <button class="btn btn-primary" (click)="startCreatingThread()">
-        Create Your First Thread
-      </button>
+    <!-- Empty State -->
+    <div class="empty-state" *ngIf="threads.length === 0">
+      <p *ngIf="connected">No conversations yet</p>
+      <p *ngIf="!connected">Cannot load threads while disconnected</p>
     </div>
 
-    <div class="empty-state" *ngIf="threads.length === 0 && !connected">
-      <div class="empty-icon">🔌</div>
-      <h3>Backend disconnected</h3>
-      <p>Cannot load threads while disconnected</p>
-    </div>
-
-    <div 
+    <!-- Thread Items - Simple chat descriptions only -->
+    <button 
       class="thread-item" 
       *ngFor="let thread of threads; trackBy: trackThread"
       [class.selected]="thread.id === selectedThreadId"
       (click)="selectThread(thread)">
       
       <div class="thread-content">
-        <div class="thread-header">
-          <h3 class="thread-name">{{ thread.title }}</h3>
-          <button 
-            class="delete-btn" 
-            (click)="deleteThread(thread, $event)"
-            title="Delete thread">
-            <span class="icon">×</span>
-          </button>
-        </div>
-        
-        <div class="thread-meta">
-          <span class="message-count">{{ thread.message_count }} messages</span>
-          <span class="last-updated">{{ formatDate(thread.updated_at) }}</span>
-        </div>
+        <div class="thread-title">{{ thread.title || 'New conversation' }}</div>
       </div>
       
-      <div class="thread-indicator" *ngIf="thread.id === selectedThreadId">
-        <div class="active-dot"></div>
+      <div class="thread-actions">
+        <button 
+          class="delete-btn" 
+          (click)="deleteThread(thread, $event)"
+          title="Delete conversation">
+          ×
+        </button>
       </div>
-    </div>
+    </button>
   </div>
 </div> 

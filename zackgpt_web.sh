@@ -4,6 +4,17 @@ trap ctrl_c INT
 
 function ctrl_c() {
   echo -e "\n\033[1;31m[!] Interrupted. Cleaning up...\033[0m"
+  # Kill background processes
+  if [ ! -z "$BACKEND_PID" ]; then
+    echo -e "\033[1;33m[!] Stopping backend server (PID: $BACKEND_PID)...\033[0m"
+    kill $BACKEND_PID 2>/dev/null
+  fi
+  if [ ! -z "$FRONTEND_PID" ]; then
+    echo -e "\033[1;33m[!] Stopping frontend server (PID: $FRONTEND_PID)...\033[0m"
+    kill $FRONTEND_PID 2>/dev/null
+  fi
+  # Kill any remaining ng serve processes
+  pkill -f "ng serve" 2>/dev/null
   type deactivate &>/dev/null && deactivate
   exit 1
 }
@@ -32,7 +43,7 @@ function setup_environment() {
   # Upgrade pip and install dependencies
   echo -e "\033[1;33m[!] Installing/updating dependencies...\033[0m"
   pip install --upgrade pip setuptools wheel > /dev/null
-  pip install -r requirements.txt
+  pip install -r requirements.txt > /dev/null
   
   # Check for .env file
   if [ ! -f .env ]; then
@@ -53,18 +64,105 @@ function setup_environment() {
   echo -e "\033[1;32m[+] Environment ready!\033[0m"
 }
 
+function check_frontend_dependencies() {
+  echo -e "\033[1;33m[!] Checking frontend dependencies...\033[0m"
+  
+  # Check if Node.js is installed
+  if ! command -v node &> /dev/null; then
+    echo -e "\033[1;31m[!] Node.js is not installed. Please install Node.js first.\033[0m"
+    exit 1
+  fi
+  
+  # Check if npm is installed
+  if ! command -v npm &> /dev/null; then
+    echo -e "\033[1;31m[!] npm is not installed. Please install npm first.\033[0m"
+    exit 1
+  fi
+  
+  # Check if UI directory exists
+  if [ ! -d "ui/zackgpt-ui" ]; then
+    echo -e "\033[1;31m[!] Frontend directory not found. Make sure you're in the ZackGPT root directory.\033[0m"
+    exit 1
+  fi
+  
+  # Install frontend dependencies if needed
+  if [ ! -d "ui/zackgpt-ui/node_modules" ]; then
+    echo -e "\033[1;33m[!] Installing frontend dependencies...\033[0m"
+    cd ui/zackgpt-ui
+    npm install
+    cd ../..
+  fi
+  
+  echo -e "\033[1;32m[+] Frontend dependencies ready!\033[0m"
+}
+
+function start_backend() {
+  echo -e "\033[1;32m[+] Starting ZackGPT backend server...\033[0m"
+  python -m scripts.startup.main_web &
+  BACKEND_PID=$!
+  echo -e "\033[1;37m   Backend PID: $BACKEND_PID\033[0m"
+  
+  # Wait for backend to start
+  echo -e "\033[1;33m[!] Waiting for backend to start...\033[0m"
+  for i in {1..30}; do
+    if curl -s http://localhost:8000/ > /dev/null 2>&1; then
+      echo -e "\033[1;32m[+] Backend is ready!\033[0m"
+      break
+    fi
+    sleep 1
+    if [ $i -eq 30 ]; then
+      echo -e "\033[1;31m[!] Backend failed to start within 30 seconds\033[0m"
+      exit 1
+    fi
+  done
+}
+
+function start_frontend() {
+  echo -e "\033[1;32m[+] Starting ZackGPT frontend server...\033[0m"
+  cd ui/zackgpt-ui
+  npm start -- --host 0.0.0.0 &
+  FRONTEND_PID=$!
+  cd ../..
+  echo -e "\033[1;37m   Frontend PID: $FRONTEND_PID\033[0m"
+  
+  # Wait for frontend to start
+  echo -e "\033[1;33m[!] Waiting for frontend to start...\033[0m"
+  for i in {1..60}; do
+    if curl -s http://localhost:4200/ > /dev/null 2>&1; then
+      echo -e "\033[1;32m[+] Frontend is ready!\033[0m"
+      break
+    fi
+    sleep 1
+    if [ $i -eq 60 ]; then
+      echo -e "\033[1;31m[!] Frontend failed to start within 60 seconds\033[0m"
+      exit 1
+    fi
+  done
+}
+
 function start_web_server() {
-  echo -e "\033[1;36m[+] Starting ZackGPT Web API Server...\033[0m"
-  echo ""
-  echo -e "\033[1;33m📡 Server will be available at:\033[0m"
-  echo -e "\033[1;37m   • Frontend: http://localhost:4200\033[0m"
-  echo -e "\033[1;37m   • API: http://localhost:8000\033[0m"
-  echo -e "\033[1;37m   • API Docs: http://localhost:8000/docs\033[0m"
-  echo ""
-  echo -e "\033[1;32m🚀 Starting backend server...\033[0m"
+  echo -e "\033[1;36m[+] Starting ZackGPT Web Application...\033[0m"
   echo ""
   
-  python -m scripts.startup.main_web
+  # Start backend first
+  start_backend
+  
+  # Then start frontend
+  start_frontend
+  
+  echo ""
+  echo -e "\033[1;32m🎉 ZackGPT Web Application is ready!\033[0m"
+  echo ""
+  echo -e "\033[1;33m📡 Access your application at:\033[0m"
+  echo -e "\033[1;37m   • Frontend UI: http://localhost:4200\033[0m"
+  echo -e "\033[1;37m   • Backend API: http://localhost:8000\033[0m"
+  echo -e "\033[1;37m   • API Docs: http://localhost:8000/docs\033[0m"
+  echo ""
+  echo -e "\033[1;36m💡 Press Ctrl+C to stop both servers\033[0m"
+  echo ""
+  
+  # Wait for both processes
+  wait
 }
 
 function main() {
@@ -77,6 +175,7 @@ function main() {
   fi
   
   setup_environment
+  check_frontend_dependencies
   start_web_server
 }
 
@@ -86,20 +185,23 @@ if [[ "$1" == "-h" || "$1" == "--help" ]]; then
   echo ""
   echo "ZackGPT Web Server Launcher"
   echo ""
-  echo "This script starts the ZackGPT web API server with all dependencies."
+  echo "This script starts both the ZackGPT backend API and frontend UI servers."
   echo ""
   echo "Prerequisites:"
   echo "  • Python 3.7+"
+  echo "  • Node.js and npm"
   echo "  • .env file with OPENAI_API_KEY"
   echo ""
   echo "Usage:"
-  echo "  ./zackgpt_web.sh        Start the web server"
+  echo "  ./zackgpt_web.sh        Start both backend and frontend servers"
   echo "  ./zackgpt_web.sh -h     Show this help"
   echo ""
-  echo "After starting, you can:"
-  echo "  1. Visit http://localhost:8000/docs for API documentation"
-  echo "  2. Start the frontend with: cd ui/zackgpt-ui && npm start"
-  echo "  3. Visit http://localhost:4200 for the web interface"
+  echo "Once started, you can access:"
+  echo "  • Frontend UI: http://localhost:4200"
+  echo "  • Backend API: http://localhost:8000"
+  echo "  • API Documentation: http://localhost:8000/docs"
+  echo ""
+  echo "Press Ctrl+C to stop both servers gracefully."
   echo ""
   exit 0
 fi
