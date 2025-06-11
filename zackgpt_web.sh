@@ -13,8 +13,8 @@ function ctrl_c() {
     echo -e "\033[1;33m[!] Stopping frontend server (PID: $FRONTEND_PID)...\033[0m"
     kill $FRONTEND_PID 2>/dev/null
   fi
-  # Kill any remaining ng serve processes
-  pkill -f "ng serve" 2>/dev/null
+  # Kill any remaining React processes
+  pkill -f "react-scripts start" 2>/dev/null
   type deactivate &>/dev/null && deactivate
   exit 1
 }
@@ -79,18 +79,18 @@ function check_frontend_dependencies() {
     exit 1
   fi
   
-  # Check if UI directory exists
-  if [ ! -d "ui/zackgpt-ui" ]; then
+  # Check if frontend directory exists
+  if [ ! -d "frontend" ]; then
     echo -e "\033[1;31m[!] Frontend directory not found. Make sure you're in the ZackGPT root directory.\033[0m"
     exit 1
   fi
   
   # Install frontend dependencies if needed
-  if [ ! -d "ui/zackgpt-ui/node_modules" ]; then
+  if [ ! -d "frontend/node_modules" ]; then
     echo -e "\033[1;33m[!] Installing frontend dependencies...\033[0m"
-    cd ui/zackgpt-ui
+    cd frontend
     npm install
-    cd ../..
+    cd ..
   fi
   
   echo -e "\033[1;32m[+] Frontend dependencies ready!\033[0m"
@@ -119,16 +119,16 @@ function start_backend() {
 
 function start_frontend() {
   echo -e "\033[1;32m[+] Starting ZackGPT frontend server...\033[0m"
-  cd ui/zackgpt-ui
-  npm start -- --host 0.0.0.0 &
+  cd frontend
+  BROWSER=none npm start &
   FRONTEND_PID=$!
-  cd ../..
+  cd ..
   echo -e "\033[1;37m   Frontend PID: $FRONTEND_PID\033[0m"
   
   # Wait for frontend to start
   echo -e "\033[1;33m[!] Waiting for frontend to start...\033[0m"
   for i in {1..60}; do
-    if curl -s http://localhost:4200/ > /dev/null 2>&1; then
+    if curl -s http://localhost:3000/ > /dev/null 2>&1; then
       echo -e "\033[1;32m[+] Frontend is ready!\033[0m"
       break
     fi
@@ -154,7 +154,7 @@ function start_web_server() {
   echo -e "\033[1;32m🎉 ZackGPT Web Application is ready!\033[0m"
   echo ""
   echo -e "\033[1;33m📡 Access your application at:\033[0m"
-  echo -e "\033[1;37m   • Frontend UI: http://localhost:4200\033[0m"
+  echo -e "\033[1;37m   • Frontend UI: http://localhost:3000\033[0m"
   echo -e "\033[1;37m   • Backend API: http://localhost:8000\033[0m"
   echo -e "\033[1;37m   • API Docs: http://localhost:8000/docs\033[0m"
   echo ""
@@ -197,11 +197,9 @@ if [[ "$1" == "-h" || "$1" == "--help" ]]; then
   echo "  ./zackgpt_web.sh -h     Show this help"
   echo ""
   echo "Once started, you can access:"
-  echo "  • Frontend UI: http://localhost:4200"
+  echo "  • Frontend UI: http://localhost:3000"
   echo "  • Backend API: http://localhost:8000"
   echo "  • API Documentation: http://localhost:8000/docs"
-  echo ""
-  echo "Press Ctrl+C to stop both servers gracefully."
   echo ""
   exit 0
 fi

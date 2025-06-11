@@ -568,15 +568,6 @@ async def startup_event():
         "cors_origins": ["http://localhost:4200", "http://127.0.0.1:4200"],
         "websocket_enabled": True
     })
-    
-    # Create a default thread for testing
-    default_thread = thread_manager.create_thread("Welcome to ZackGPT")
-    welcome_message = ChatMessage(
-        role="assistant",
-        content="Hello! I'm ZackGPT, your AI assistant. I'm powered by an advanced prompt evolution system that learns from our conversations. How can I help you today?",
-        thread_id=default_thread.id
-    )
-    thread_manager.add_message(welcome_message)
 
 @app.on_event("shutdown")
 async def shutdown_event():

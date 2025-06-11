@@ -1,0 +1,59 @@
+# ZackGPT Startup Configuration
+# Centralized service definitions and startup behavior
+
+version: "1.0"
+
+services:
+  cli:
+    type: "interactive"
+    entry_point: "cli.main"
+    description: "Command-line interface for ZackGPT"
+    dependencies: []
+    environment:
+      DEBUG_MODE: "True"
+    
+  web_api:
+    type: "server"
+    entry_point: "server.main"
+    description: "FastAPI web server for ZackGPT"
+    port: 8000
+    dependencies: []
+    environment:
+      DEBUG_MODE: "True"
+    health_check:
+      path: "/"
+      timeout: 30
+      
+  frontend_react:
+    type: "server"
+    entry_point: "npm start"
+    description: "React frontend development server"
+    port: 3000
+    dependencies: ["web_api"]
+    working_directory: "frontend"
+    
+  dev_tools:
+    type: "interactive"
+    entry_point: "cli.commands.dev"
+    description: "Development and testing utilities"
+    dependencies: []
+    environment:
+      DEBUG_MODE: "True"
+
+# Global settings
+settings:
+  default_timeout: 30
+  auto_restart: false
+  log_level: "INFO"
+  
+# Port management
+port_ranges:
+  development: "8100-8199"
+  testing: "8200-8299"
+  production: "8000-8099"
+
+# Docker settings  
+docker:
+  image_name: "zackgpt"
+  base_image: "python:3.11-slim"
+  expose_ports: [8000] 
