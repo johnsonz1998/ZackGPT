@@ -9,18 +9,17 @@ import traceback
 import json
 import os
 import sys
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../')))
 
 from config import config
-from cli.utils.output import print_success, print_error, print_info, print_banner
+from .output import print_success, print_error, print_info, print_banner
 
-from voice.whisper_listener import listen_until_silence, reload_whisper_model
-from src.zackgpt.core.query_utils import load_index, ask_gpt
-from src.zackgpt.core.context_engine import analyze_context
-from voice.elevenlabs import speak as eleven_speak
-from voice.tts_mac import speak as mac_speak
-from src.zackgpt.core.core_assistant import should_save_memory, maybe_save_memory
-from src.zackgpt.core.prompt_utils import build_prompt
+from src.zackgpt.voice.whisper_listener import listen_until_silence, reload_whisper_model
+from ..core.query_utils import load_index, ask_gpt
+from ..core.context_engine import analyze_context
+from src.zackgpt.voice.elevenlabs import speak as eleven_speak
+from src.zackgpt.voice.tts_mac import speak as mac_speak
+from ..core.core_assistant import should_save_memory, maybe_save_memory
+from ..core.prompt_utils import build_prompt
 
 # Stub for get_context_block (legacy)
 def get_context_block(max_items):

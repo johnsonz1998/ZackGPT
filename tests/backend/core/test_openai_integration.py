@@ -13,8 +13,8 @@ import openai
 from openai import OpenAI
 
 # Add project paths
-sys.path.append('.')
-sys.path.append('./src')
+# Fixed import path
+# Fixed import path
 
 class TestOpenAIConnection:
     """Test OpenAI client connection and basic functionality."""
@@ -188,7 +188,7 @@ class TestCoreAssistantIntegration:
     def test_core_assistant_creation(self):
         """Test CoreAssistant can be created successfully."""
         try:
-            from app.core_assistant import CoreAssistant
+            from src.zackgpt.core.core_assistant import CoreAssistant
             
             assistant = CoreAssistant()
             assert assistant is not None
@@ -207,7 +207,7 @@ class TestCoreAssistantIntegration:
             pytest.skip("OPENAI_API_KEY not found - skipping CoreAssistant test")
         
         try:
-            from app.core_assistant import CoreAssistant
+            from src.zackgpt.core.core_assistant import CoreAssistant
             
             # Set timeout
             def timeout_handler(signum, frame):
@@ -274,7 +274,7 @@ class TestErrorHandling:
         mock_openai.return_value = mock_client
         
         try:
-            from app.core_assistant import CoreAssistant
+            from src.zackgpt.core.core_assistant import CoreAssistant
             
             # This should handle the network error gracefully
             assistant = CoreAssistant()

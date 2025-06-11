@@ -4,119 +4,119 @@
       {
         "name": "witty_efficient",
         "content": "Be witty, sarcastic, and brutally efficient like Zack.",
-        "weight": 0.4803133490098759,
-        "success_rate": 0.24015667450493794,
-        "usage_count": 38,
-        "last_used": "2025-06-11T03:40:45.261411"
+        "weight": 0.5195720823381632,
+        "success_rate": 0.2597860411690816,
+        "usage_count": 32,
+        "last_used": "2025-06-11T05:36:50.587308"
       },
       {
         "name": "direct_helpful",
         "content": "Be direct, helpful, and cut through the noise.",
-        "weight": 0.32296182233878995,
-        "success_rate": 0.16148091116939498,
+        "weight": 0.53916182233879,
+        "success_rate": 0.269580911169395,
         "usage_count": 31,
-        "last_used": "2025-06-11T03:38:21.457393"
+        "last_used": "2025-06-11T05:37:27.151816"
       },
       {
         "name": "sharp_precise",
         "content": "Be sharp and precise\u2014value efficiency over fluff.",
-        "weight": 0.7365914485348333,
-        "success_rate": 0.36829572426741664,
-        "usage_count": 34,
-        "last_used": "2025-06-11T03:30:07.983385"
+        "weight": 1.1149334295003248,
+        "success_rate": 0.5574667147501624,
+        "usage_count": 45,
+        "last_used": "2025-06-11T05:38:30.748537"
       }
     ],
     "memory_guidelines": [
       {
         "name": "conservative",
         "content": "Only save memories you're 100% confident about.",
-        "weight": 0.5951159073901339,
-        "success_rate": 0.29755795369506693,
-        "usage_count": 24,
-        "last_used": "2025-06-11T03:38:21.485097"
+        "weight": 1.0078438849860085,
+        "success_rate": 0.5039219424930043,
+        "usage_count": 26,
+        "last_used": "2025-06-11T05:38:30.759065"
       },
       {
         "name": "balanced",
         "content": "Save relevant information but acknowledge uncertainty.",
-        "weight": 0.45149940102714214,
-        "success_rate": 0.22574970051357107,
-        "usage_count": 32,
-        "last_used": "2025-06-11T03:40:45.289306"
+        "weight": 0.9035642189244277,
+        "success_rate": 0.45178210946221387,
+        "usage_count": 33,
+        "last_used": "2025-06-11T05:37:27.164076"
       },
       {
         "name": "contextual",
         "content": "Save information that enhances future conversations.",
-        "weight": 0.7489554855444582,
-        "success_rate": 0.3744777427722291,
-        "usage_count": 47,
-        "last_used": "2025-06-11T03:30:08.011227"
+        "weight": 0.6779671711110111,
+        "success_rate": 0.33898358555550556,
+        "usage_count": 49,
+        "last_used": "2025-06-11T05:37:40.591569"
       }
     ],
     "task_instructions": [
       {
         "name": "precision_first",
         "content": "NEVER make up information or guess. If unsure, say so.",
-        "weight": 0.7167080006289246,
-        "success_rate": 0.3583540003144623,
-        "usage_count": 38,
-        "last_used": "2025-06-11T03:30:08.038680"
+        "weight": 1.0264039243195124,
+        "success_rate": 0.5132019621597562,
+        "usage_count": 35,
+        "last_used": "2025-06-11T05:38:30.766775"
       },
       {
         "name": "solution_focused",
         "content": "Focus on actionable insights and solutions.",
-        "weight": 0.616892723302662,
-        "success_rate": 0.308446361651331,
-        "usage_count": 29,
-        "last_used": "2025-06-11T03:29:52.870068"
+        "weight": 0.7902164220735379,
+        "success_rate": 0.39510821103676896,
+        "usage_count": 44,
+        "last_used": "2025-06-11T05:37:40.605102"
       },
       {
         "name": "efficiency_minded",
         "content": "Be efficient\u2014don't waste time with unnecessary explanations.",
-        "weight": 0.40612267250958956,
-        "success_rate": 0.20306133625479478,
-        "usage_count": 36,
-        "last_used": "2025-06-11T03:40:45.316923"
+        "weight": 0.5799658172770707,
+        "success_rate": 0.2899829086385354,
+        "usage_count": 29,
+        "last_used": "2025-06-11T05:37:27.180640"
       }
     ],
     "context_framers": [
       {
         "name": "memory_aware",
         "content": "Use provided memories and context to inform responses.",
-        "weight": 0.5035528350811022,
-        "success_rate": 0.2517764175405511,
-        "usage_count": 60,
-        "last_used": "2025-06-11T03:38:21.543586"
+        "weight": 1.0211910117050753,
+        "success_rate": 0.5105955058525377,
+        "usage_count": 70,
+        "last_used": "2025-06-11T05:38:30.778824"
       },
       {
         "name": "conversation_aware",
         "content": "Consider the flow and context of the current conversation.",
-        "weight": 0.5448548210498515,
-        "success_rate": 0.27242741052492575,
-        "usage_count": 43,
-        "last_used": "2025-06-11T03:40:45.347684"
+        "weight": 0.7113634634856669,
+        "success_rate": 0.35568173174283346,
+        "usage_count": 38,
+        "last_used": "2025-06-11T05:37:27.193482"
       }
     ],
     "output_formatters": [
       {
         "name": "concise_actionable",
         "content": "Keep responses concise and actionable.",
-        "weight": 0.5672747969440267,
-        "success_rate": 0.28363739847201336,
-        "usage_count": 47,
-        "last_used": "2025-06-11T03:40:45.383359"
+        "weight": 0.6892940306149253,
+        "success_rate": 0.34464701530746267,
+        "usage_count": 41,
+        "last_used": "2025-06-11T05:38:30.788124"
       },
       {
         "name": "structured_clear",
         "content": "Structure responses clearly with key points highlighted.",
-        "weight": 0.4866874352514033,
-        "success_rate": 0.24334371762570164,
-        "usage_count": 56,
-        "last_used": "2025-06-11T03:38:21.575166"
+        "weight": 0.959767725858995,
+        "success_rate": 0.4798838629294975,
+        "usage_count": 67,
+        "last_used": "2025-06-11T05:38:05.900730"
       }
     ]
   },
   "experiments": [],
-  "last_updated": "2025-06-11T03:40:45.439301",
+  "last_updated": "2025-06-11T05:38:30.797389",
   "settings": {
     "experimentation_rate": 0.1,
     "learning_rate": 0.1,

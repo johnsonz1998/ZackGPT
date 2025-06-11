@@ -101,7 +101,7 @@ cd ..
 
 ### 4. Run Tests (optional but recommended)
 ```bash
-python run_tests.py --all
+python tests/run_tests.py --all
 ```
 
 ## 🔧 Usage
@@ -183,10 +183,10 @@ GOOGLE_CSE_ID=your_custom_search_id_here    # Required with Google
 
 ### Run Test Suite
 ```bash
-python run_tests.py --all --coverage  # Full test suite with coverage
-python run_tests.py --backend         # Backend tests only
-python run_tests.py --integration     # Integration tests
-python run_tests.py --performance     # Performance benchmarks
+python tests/run_tests.py --all --coverage  # Full test suite with coverage
+python tests/run_tests.py --backend         # Backend tests only
+python tests/run_tests.py --integration     # Integration tests
+python tests/run_tests.py --performance     # Performance benchmarks
 ```
 
 ### Test Categories
@@ -285,7 +285,7 @@ cd frontend && npm start
 ### Contributing
 1. Fork the repository
 2. Create feature branch: `git checkout -b feature/amazing-feature`
-3. Run tests: `python run_tests.py --all`
+3. Run tests: `python tests/run_tests.py --all`
 4. Commit changes: `git commit -m 'Add amazing feature'`
 5. Push branch: `git push origin feature/amazing-feature`
 6. Open Pull Request

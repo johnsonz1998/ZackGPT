@@ -13,8 +13,8 @@ import sys
 import os
 
 # Add project paths
-sys.path.append('.')
-sys.path.append('./src')
+# Fixed import path
+# Fixed import path
 
 BASE_URL = "http://localhost:8000"
 

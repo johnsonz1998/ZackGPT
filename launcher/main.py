@@ -9,10 +9,10 @@ import sys
 import subprocess
 from pathlib import Path
 
-# Add project root to path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../')))
+# Add current directory to path for process_manager import
+sys.path.insert(0, os.path.dirname(__file__))
 
-from launcher.process_manager import ProcessManager
+from process_manager import ProcessManager
 
 
 def print_banner():

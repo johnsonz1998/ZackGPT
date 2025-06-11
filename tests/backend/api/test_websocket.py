@@ -13,8 +13,8 @@ import os
 import time
 
 # Add project paths
-sys.path.append('.')
-sys.path.append('./src')
+# Fixed import path
+# Fixed import path
 
 
 class TestWebSocketConnection:

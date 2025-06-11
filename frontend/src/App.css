@@ -103,6 +103,7 @@ body {
   margin-bottom: 4px;
   position: relative;
   transition: background-color 0.2s;
+  user-select: none;
 }
 
 .thread-item:hover {

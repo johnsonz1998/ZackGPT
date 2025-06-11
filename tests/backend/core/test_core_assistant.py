@@ -10,9 +10,10 @@ import time
 from unittest.mock import Mock, patch, MagicMock
 import asyncio
 
-# Add project paths
-sys.path.append('.')
-sys.path.append('./src')
+# Add project root to path for imports
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 
 class TestCoreAssistantBasics:
@@ -21,7 +22,7 @@ class TestCoreAssistantBasics:
     def test_core_assistant_import(self):
         """Test that CoreAssistant can be imported."""
         try:
-            from app.core_assistant import CoreAssistant
+            from src.zackgpt.core.core_assistant import CoreAssistant
             assert CoreAssistant is not None
             print("✅ CoreAssistant imported successfully")
         except ImportError as e:
@@ -30,7 +31,7 @@ class TestCoreAssistantBasics:
     def test_core_assistant_creation(self):
         """Test CoreAssistant instantiation."""
         try:
-            from app.core_assistant import CoreAssistant
+            from src.zackgpt.core.core_assistant import CoreAssistant
             assistant = CoreAssistant()
             
             assert assistant is not None
@@ -45,7 +46,7 @@ class TestCoreAssistantBasics:
     def test_core_assistant_attributes(self):
         """Test CoreAssistant has required attributes."""
         try:
-            from app.core_assistant import CoreAssistant
+            from src.zackgpt.core.core_assistant import CoreAssistant
             assistant = CoreAssistant()
             
             # Check for essential attributes
@@ -69,7 +70,7 @@ class TestCoreAssistantProcessing:
     def setup_method(self):
         """Set up test environment."""
         try:
-            from app.core_assistant import CoreAssistant
+            from src.zackgpt.core.core_assistant import CoreAssistant
             self.assistant = CoreAssistant()
         except Exception as e:
             self.assistant = None
@@ -154,12 +155,12 @@ class TestCoreAssistantErrorHandling:
     def setup_method(self):
         """Set up test environment."""
         try:
-            from app.core_assistant import CoreAssistant
+            from src.zackgpt.core.core_assistant import CoreAssistant
             self.assistant = CoreAssistant()
         except Exception as e:
             self.assistant = None
     
-    @patch('app.core_assistant.CoreAssistant.process_input')
+    @patch('src.zackgpt.core.core_assistant.CoreAssistant.process_input')
     def test_network_error_handling(self, mock_process):
         """Test handling of network errors."""
         if not self.assistant:
@@ -204,7 +205,7 @@ class TestCoreAssistantConfiguration:
     def test_model_configuration(self):
         """Test model configuration."""
         try:
-            from app.core_assistant import CoreAssistant
+            from src.zackgpt.core.core_assistant import CoreAssistant
             assistant = CoreAssistant()
             
             # Check model is set
@@ -220,7 +221,7 @@ class TestCoreAssistantConfiguration:
     def test_client_configuration(self):
         """Test OpenAI client configuration."""
         try:
-            from app.core_assistant import CoreAssistant
+            from src.zackgpt.core.core_assistant import CoreAssistant
             assistant = CoreAssistant()
             
             # Check client is configured
@@ -241,7 +242,7 @@ class TestCoreAssistantPerformance:
     def setup_method(self):
         """Set up test environment."""
         try:
-            from app.core_assistant import CoreAssistant
+            from src.zackgpt.core.core_assistant import CoreAssistant
             self.assistant = CoreAssistant()
         except Exception as e:
             self.assistant = None

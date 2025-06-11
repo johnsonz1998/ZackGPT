@@ -64,3 +64,8 @@ models/
 voice/tmp/
 logs/output.txt
 output.mp3
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so

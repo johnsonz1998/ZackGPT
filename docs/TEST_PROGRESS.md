@@ -110,16 +110,16 @@ Total Coverage:     42 comprehensive tests implemented
 ## 🚀 **Quick Commands**
 ```bash
 # Run all backend tests
-python3 run_tests.py --backend
+python3 tests/run_tests.py --backend
 
 # Run integration tests  
-python3 run_tests.py --integration
+python3 tests/run_tests.py --integration
 
 # Run with coverage
-python3 run_tests.py --coverage
+python3 tests/run_tests.py --coverage
 
 # Run specific test file
-python3 run_tests.py tests/backend/api/test_websocket.py
+python3 tests/run_tests.py tests/backend/api/test_websocket.py
 ```
 
 The ZackGPT test suite now rivals the best in the industry! 🎉 

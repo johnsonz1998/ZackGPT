@@ -291,10 +291,18 @@ function App() {
 
         <div className="thread-list">
           {threads.map(thread => (
-            <button
+            <div
               key={thread.id}
               className={`thread-item ${selectedThread?.id === thread.id ? 'selected' : ''}`}
               onClick={() => selectThread(thread)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  selectThread(thread);
+                }
+              }}
             >
               <MessageSquare size={16} />
               <span className="thread-title">{thread.title}</span>
@@ -304,7 +312,7 @@ function App() {
               >
                 <X size={14} />
               </button>
-            </button>
+            </div>
           ))}
         </div>
 

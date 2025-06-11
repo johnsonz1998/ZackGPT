@@ -7,15 +7,14 @@ Development and testing utilities for ZackGPT
 import os
 import json
 import sys
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../')))
 
 from config import config
 from voice import whisper_listener
 import src.zackgpt.voice.elevenlabs as eleven
 import src.zackgpt.voice.tts_mac as mac
 from config import config_profiles as profiles
-from src.zackgpt.core.query_utils import load_index
-from cli.utils.output import print_success, print_error, print_info, print_banner, get_user_choice, confirm_action
+from ..core.query_utils import load_index
+from .output import print_success, print_error, print_info, print_banner, get_user_choice, confirm_action
 
 # Stubs for removed memory_engine functions
 def get_context_block(max_items):
@@ -222,7 +221,7 @@ def show_dev_menu():
         os.system(f"python -m scripts.startup.main_voice config/profiles/{temp_profile}")
 
     elif choice == "17":
-        from src.zackgpt.core.core_assistant import CoreAssistant
+        from ..core.core_assistant import CoreAssistant
         assistant = CoreAssistant()
         stats = assistant.get_evolution_stats()
         
@@ -271,7 +270,7 @@ def show_dev_menu():
     elif choice == "19":
         print("🤖 Testing Prompt Enhancement System...")
         try:
-            from app.prompt_enhancer import HybridPromptEnhancer
+            from ..core.prompt_enhancer import HybridPromptEnhancer
             enhancer = HybridPromptEnhancer()
             
             user_input = input("Enter test user input: ").strip()
@@ -299,7 +298,7 @@ def show_dev_menu():
     elif choice == "20":
         print("🧠 Generating Enhanced Prompt Component...")
         try:
-            from app.prompt_enhancer import HybridPromptEnhancer
+            from ..core.prompt_enhancer import HybridPromptEnhancer
             enhancer = HybridPromptEnhancer()
             
             print("Component types: personality, memory_guidelines, task_instructions, context_framers, output_formatters")
@@ -338,7 +337,7 @@ def show_dev_menu():
     elif choice == "21":
         print("📊 Prompt Enhancement System Statistics:")
         try:
-            from app.prompt_enhancer import HybridPromptEnhancer
+            from ..core.prompt_enhancer import HybridPromptEnhancer
             enhancer = HybridPromptEnhancer()
             stats = enhancer.get_enhancement_stats()
             
@@ -375,7 +374,7 @@ def show_dev_menu():
         print("❌ Invalid option.")
 
 def run_test_interaction():
-    from app.core_assistant import get_response
+    from ..core.core_assistant import get_response
     index = load_index()
     question = input("🧪 Enter test question: ")
     response = get_response(user_input=question, agent="core_assistant")

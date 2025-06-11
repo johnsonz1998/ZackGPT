@@ -6,12 +6,11 @@ Text-based interactive chat interface
 
 import os
 import sys
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../')))
 
 from dotenv import load_dotenv
-from src.zackgpt.core.core_assistant import CoreAssistant
-from src.zackgpt.core.logger import debug_info, debug_success
-from cli.utils.output import print_success, print_error, print_info, print_banner
+from ..core.core_assistant import CoreAssistant
+from ..core.logger import debug_info, debug_success
+from .output import print_success, print_error, print_info, print_banner
 
 def run_text_mode():
     """Run the text interaction mode."""

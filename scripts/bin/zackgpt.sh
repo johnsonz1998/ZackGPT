@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# ZackGPT Master Launcher - Restructured
-# Now uses proper Python package structure
+# ZackGPT Master Launcher - Simplified
+# Delegates to the new centralized launcher system
 
 set -e
 
@@ -10,7 +10,6 @@ function print_banner() {
   echo "╔═══════════════════════════════════════════╗"
   echo "║         🚀 ZackGPT Master Launcher         ║"
   echo "║      Advanced AI Assistant Platform       ║"
-  echo "║           ✨ Now Restructured! ✨           ║"
   echo "╚═══════════════════════════════════════════╝"
   echo -e "\033[0m"
 }
@@ -42,20 +41,14 @@ function main() {
   check_environment
   
   echo ""
-  echo -e "\033[1;32m✅ ZackGPT has been completely restructured!\033[0m"
+  echo -e "\033[1;33m🎯 ZackGPT now uses a centralized launcher system!\033[0m"
   echo ""
-  echo -e "\033[1;36m🎯 New unified interface options:\033[0m"
-  echo -e "\033[1;37m  ./bin/zackgpt-cli          # Direct CLI access\033[0m"
-  echo -e "\033[1;37m  ./bin/zackgpt-web          # Direct web server\033[0m"
-  echo -e "\033[1;37m  python launcher/main.py    # Full launcher menu\033[0m"
+  echo -e "\033[1;36mFor the new organized experience:\033[0m"
+  echo -e "\033[1;37m  python launcher/main.py    # New centralized launcher\033[0m"
   echo ""
-  echo -e "\033[1;36m📦 New package structure:\033[0m"
-  echo -e "\033[1;37m  src/zackgpt/core/          # Core AI logic\033[0m"
-  echo -e "\033[1;37m  src/zackgpt/cli/           # CLI interface\033[0m"
-  echo -e "\033[1;37m  src/zackgpt/web/           # Web interface\033[0m"
-  echo -e "\033[1;37m  scripts/bin/               # All scripts centralized\033[0m"
-  echo ""
-  echo -e "\033[1;33m⚡ All imports fixed, no more sys.path hacks!\033[0m"
+  echo -e "\033[1;36mOr use direct launchers:\033[0m"
+  echo -e "\033[1;37m  cli/scripts/zackgpt-cli.sh     # Pure CLI mode\033[0m"
+  echo -e "\033[1;37m  server/scripts/start-server.sh # Web server only\033[0m"
   echo ""
   echo -e "\033[1;33mStarting centralized launcher...\033[0m"
   echo ""
