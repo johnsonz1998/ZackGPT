@@ -1,7 +1,10 @@
 import requests
 import subprocess
 import time
-from ...config import config
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../..'))
+from config import config
 import platform
 
 def speak(text):

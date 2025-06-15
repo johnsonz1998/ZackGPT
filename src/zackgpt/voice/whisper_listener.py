@@ -1,4 +1,7 @@
 import numpy as np
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../..'))
 from config import config
 import webrtcvad
 from scipy.io.wavfile import write

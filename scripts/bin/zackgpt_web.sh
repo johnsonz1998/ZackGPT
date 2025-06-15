@@ -98,7 +98,7 @@ function check_frontend_dependencies() {
 
 function start_backend() {
   echo -e "\033[1;32m[+] Starting ZackGPT backend server...\033[0m"
-  python -m scripts.startup.main_web &
+  python -m uvicorn src.zackgpt.web.web_api:app --host 0.0.0.0 --port 8000 &
   BACKEND_PID=$!
   echo -e "\033[1;37m   Backend PID: $BACKEND_PID\033[0m"
   

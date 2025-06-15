@@ -84,7 +84,7 @@ def run_tests(test_path=None, markers=None, verbose=False, coverage=False):
         cmd.append("-v")
     
     if coverage:
-        cmd.extend(["--cov=app", "--cov=src", "--cov-report=term-missing"])
+        cmd.extend(["--cov=src/zackgpt", "--cov-report=term-missing", "--cov-report=html:tests/coverage_html"])
     
     # Configuration is now in pyproject.toml - no need for -c flag
     

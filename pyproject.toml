@@ -84,36 +84,28 @@ where = ["src"]
 include = ["zackgpt*"]
 
 [tool.setuptools.package-data]
-zackgpt = ["prompts/*.txt", "config/*.json", "config/*.yaml"]
+zackgpt = ["prompts/*.txt", "config/*.json", "config/*.yaml", "voice/tmp/*"]
 
 [tool.setuptools_scm]
 write_to = "src/zackgpt/_version.py"
 
 [tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -q --strict-markers --strict-config"
 testpaths = ["tests"]
-python_files = ["test_*.py", "*_test.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-addopts = [
-    "--strict-markers",
-    "--strict-config",
-    "--verbose",
-    "--cov=src/zackgpt",
-    "--cov-report=term-missing",
-    "--cov-report=html:tests/coverage_html",
-    "--cov-branch",
-]
-filterwarnings = [
-    "ignore::DeprecationWarning",
-    "ignore::PendingDeprecationWarning",
-]
 markers = [
-    "unit: Unit tests",
-    "integration: Integration tests requiring running services", 
-    "e2e: End-to-end tests",
-    "performance: Performance and load tests",
-    "slow: Tests that take a long time to run",
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+    "api: marks tests as API tests",
+    "websocket: marks tests as WebSocket tests",
+    "performance: marks tests as performance tests",
+    "e2e: marks tests as end-to-end tests",
+    "core: marks tests as core functionality tests",
+    "frontend: marks tests as frontend tests",
+    "backend: marks tests as backend tests",
 ]
+asyncio_mode = "auto"
 
 [tool.black]
 line-length = 88

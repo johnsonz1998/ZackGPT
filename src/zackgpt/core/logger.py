@@ -1,11 +1,15 @@
 import os
 import logging
 from pathlib import Path
-from typing import Any, Optional, Dict
+from typing import Any, Optional, Dict, Union
 from datetime import datetime
 import json
 import sqlite3
 import threading
+import time
+import traceback
+from functools import wraps
+import re
 
 # Create logs dir if not exists
 log_dir = Path("logs")
@@ -15,12 +19,24 @@ log_dir.mkdir(exist_ok=True)
 logger = logging.getLogger("zackgpt")
 logger.setLevel(logging.DEBUG)  # Set to INFO or WARNING for production
 
-handler = logging.FileHandler(log_dir / "dev.log")
-handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+# File handler for all logs
+all_handler = logging.FileHandler(log_dir / "all.log")
+all_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+
+# File handler for errors only
+error_handler = logging.FileHandler(log_dir / "error.log")
+error_handler.setLevel(logging.ERROR)
+error_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s\n%(pathname)s:%(lineno)d\n%(message)s"))
+
+# Console handler with colors
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
 
 # Avoid adding duplicate handlers
 if not logger.hasHandlers():
-    logger.addHandler(handler)
+    logger.addHandler(all_handler)
+    logger.addHandler(error_handler)
+    logger.addHandler(console_handler)
 
 # Quick aliases
 log_debug = logger.debug
@@ -34,6 +50,65 @@ DEBUG_MODE = os.getenv("DEBUG_MODE", "False").lower() == "true"
 # Log aggregation settings
 LOG_AGGREGATION_ENABLED = os.getenv("LOG_AGGREGATION_ENABLED", "true").lower() == "true"
 LOG_DB_PATH = os.getenv("LOG_DB_PATH", "logs/zackgpt_analytics.db")
+
+class LogError(Exception):
+    """Custom exception for logging errors"""
+    pass
+
+class PerformanceMetrics:
+    """Track and log performance metrics."""
+    
+    def __init__(self):
+        self._metrics = {}
+        self._lock = threading.Lock()
+    
+    def start_timer(self, operation: str) -> None:
+        """Start timing an operation."""
+        try:
+            with self._lock:
+                self._metrics[operation] = {
+                    'start_time': time.time(),
+                    'end_time': None,
+                    'duration': None
+                }
+        except Exception as e:
+            logger.error(f"Failed to start timer for {operation}: {str(e)}")
+            raise LogError(f"Timer start failed: {str(e)}")
+    
+    def end_timer(self, operation: str) -> float:
+        """End timing an operation and return duration."""
+        try:
+            with self._lock:
+                if operation not in self._metrics:
+                    raise LogError(f"No timer found for operation: {operation}")
+                
+                end_time = time.time()
+                self._metrics[operation]['end_time'] = end_time
+                duration = end_time - self._metrics[operation]['start_time']
+                self._metrics[operation]['duration'] = duration
+                
+                logger.debug(f"Operation {operation} completed in {duration:.2f} seconds")
+                return duration
+        except Exception as e:
+            logger.error(f"Failed to end timer for {operation}: {str(e)}")
+            raise LogError(f"Timer end failed: {str(e)}")
+
+# Global performance metrics instance
+_perf_metrics = PerformanceMetrics()
+
+def log_performance(operation: str):
+    """Decorator to log performance of functions."""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            _perf_metrics.start_timer(operation)
+            try:
+                result = func(*args, **kwargs)
+                return result
+            finally:
+                _perf_metrics.end_timer(operation)
+        return wrapper
+    return decorator
 
 class LogAggregator:
     """Structured log aggregation for intelligent analysis."""
@@ -76,6 +151,19 @@ class LogAggregator:
                     level TEXT NOT NULL,
                     message TEXT,
                     data TEXT,
+                    stack_trace TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS performance_metrics (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT NOT NULL,
+                    operation TEXT NOT NULL,
+                    duration REAL NOT NULL,
+                    success BOOLEAN,
+                    error_message TEXT,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
             """)
@@ -85,6 +173,7 @@ class LogAggregator:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_learning_component ON learning_events(component_name)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_learning_rating ON learning_events(user_rating)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_system_level ON system_events(level)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_performance_operation ON performance_metrics(operation)")
     
     def log_learning_event(self, event_type: str, component_name: str = None, **kwargs):
         """Log a learning-related event for analysis."""
@@ -119,8 +208,8 @@ class LogAggregator:
             except Exception as e:
                 print(f"❌ Log aggregation error: {e}")
     
-    def log_system_event(self, level: str, event_type: str, message: str, data: Dict = None):
-        """Log a system event."""
+    def log_system_event(self, level: str, event_type: str, message: str, data: Dict = None, error: Exception = None):
+        """Log a system event with optional error details."""
         if not LOG_AGGREGATION_ENABLED:
             return
             
@@ -128,14 +217,36 @@ class LogAggregator:
             try:
                 with sqlite3.connect(self.db_path) as conn:
                     conn.execute("""
-                        INSERT INTO system_events (timestamp, event_type, level, message, data)
-                        VALUES (?, ?, ?, ?, ?)
+                        INSERT INTO system_events (timestamp, event_type, level, message, data, stack_trace)
+                        VALUES (?, ?, ?, ?, ?, ?)
                     """, (
                         datetime.now().isoformat(),
                         event_type,
                         level,
                         message,
-                        json.dumps(data) if data else None
+                        json.dumps(data) if data else None,
+                        traceback.format_exc() if error else None
+                    ))
+            except Exception as e:
+                print(f"❌ Log aggregation error: {e}")
+    
+    def log_performance(self, operation: str, duration: float, success: bool = True, error_message: str = None):
+        """Log performance metrics."""
+        if not LOG_AGGREGATION_ENABLED:
+            return
+            
+        with self.db_lock:
+            try:
+                with sqlite3.connect(self.db_path) as conn:
+                    conn.execute("""
+                        INSERT INTO performance_metrics (timestamp, operation, duration, success, error_message)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (
+                        datetime.now().isoformat(),
+                        operation,
+                        duration,
+                        success,
+                        error_message
                     ))
             except Exception as e:
                 print(f"❌ Log aggregation error: {e}")
@@ -184,19 +295,22 @@ def debug_log(message: str, data: Optional[Any] = None, prefix: str = "🔍") ->
         _log_aggregator.log_system_event("DEBUG", "debug_log", message, data)
 
 def debug_error(message: str, error: Optional[Exception] = None) -> None:
+    """Log error messages with optional exception details."""
     if not DEBUG_MODE:
         return
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     output = f"❌ [{timestamp}] {message}"
     if error:
         output += f"\nError details: {str(error)}"
+        output += f"\nStack trace:\n{traceback.format_exc()}"
     print(output)
     
     error_data = {"error": str(error)} if error else None
     if _log_aggregator:
-        _log_aggregator.log_system_event("ERROR", "error", message, error_data)
+        _log_aggregator.log_system_event("ERROR", "error", message, error_data, error)
 
 def debug_success(message: str, data: Optional[Any] = None) -> None:
+    """Log success messages with optional data."""
     if not DEBUG_MODE:
         return
     debug_log(message, data, prefix="✅")
@@ -205,11 +319,16 @@ def debug_success(message: str, data: Optional[Any] = None) -> None:
         _log_aggregator.log_system_event("SUCCESS", "success", message, data)
 
 def debug_warning(message: str, data: Optional[Any] = None) -> None:
+    """Log warning messages with optional data."""
     if not DEBUG_MODE:
         return
     debug_log(message, data, prefix="⚠️")
+    
+    if _log_aggregator:
+        _log_aggregator.log_system_event("WARNING", "warning", message, data)
 
 def debug_info(message: str, data: Optional[Any] = None) -> None:
+    """Log info messages with optional data."""
     if not DEBUG_MODE:
         return
     debug_log(message, data, prefix="ℹ️")
@@ -256,3 +375,52 @@ def log_component_performance_update(component_name: str, success: bool, weight_
         success=success,
         **kwargs
     )
+
+def log_performance_metric(operation: str, duration: float, success: bool = True, error_message: str = None):
+    """Log performance metrics for analysis."""
+    if _log_aggregator:
+        _log_aggregator.log_performance(operation, duration, success, error_message)
+
+def log_performance_metrics(operation: str, duration: float, details: Optional[Dict] = None) -> None:
+    """Log performance metrics for an operation"""
+    try:
+        metrics = {
+            'operation': operation,
+            'duration': duration,
+            'timestamp': datetime.now().isoformat()
+        }
+        if details:
+            metrics.update(details)
+        
+        debug_info(f"Performance metrics for {operation}", metrics)
+        log_system_event('performance', f"Operation {operation} completed", metrics)
+    except Exception as e:
+        debug_error(f"Failed to log performance metrics for {operation}", e, {
+            'duration': duration,
+            'details': details
+        })
+        raise LogError(f"Performance metrics logging failed: {str(e)}")
+
+def performance_logger(func):
+    """Decorator to log performance metrics for a function"""
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            start_time = time.time()
+            result = func(*args, **kwargs)
+            duration = time.time() - start_time
+            
+            log_performance_metrics(
+                func.__name__,
+                duration,
+                {
+                    'args': str(args),
+                    'kwargs': str(kwargs),
+                    'result_type': type(result).__name__
+                }
+            )
+            return result
+        except Exception as e:
+            debug_error(f"Performance logging failed for {func.__name__}", e)
+            raise
+    return wrapper

@@ -1,0 +1,224 @@
+import pytest
+import os
+import time
+import json
+import sqlite3
+from pathlib import Path
+from datetime import datetime
+from src.zackgpt.core.logger import (
+    debug_log, debug_error, debug_success, debug_warning, debug_info,
+    log_learning_event, log_component_selection, log_user_rating,
+    log_component_performance_update, log_performance_metric,
+    LogAggregator, PerformanceMetrics, log_performance
+)
+
+@pytest.fixture
+def log_dir(tmp_path):
+    """Create a temporary log directory."""
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    return log_dir
+
+@pytest.fixture
+def db_path(tmp_path):
+    """Create a temporary database path."""
+    return tmp_path / "test_logs.db"
+
+@pytest.fixture
+def log_aggregator(db_path):
+    """Create a LogAggregator instance with a test database."""
+    return LogAggregator(str(db_path))
+
+@pytest.fixture
+def perf_metrics():
+    """Create a PerformanceMetrics instance."""
+    return PerformanceMetrics()
+
+def test_debug_log(log_dir, monkeypatch):
+    """Test basic debug logging functionality."""
+    monkeypatch.setenv("DEBUG_MODE", "true")
+    test_message = "Test debug message"
+    test_data = {"key": "value"}
+    
+    debug_log(test_message, test_data)
+    
+    # Check if log file was created
+    log_file = log_dir / "all.log"
+    assert log_file.exists()
+    
+    # Read log content
+    content = log_file.read_text()
+    assert test_message in content
+    assert "key" in content
+    assert "value" in content
+
+def test_error_logging(log_dir, monkeypatch):
+    """Test error logging with exception details."""
+    monkeypatch.setenv("DEBUG_MODE", "true")
+    test_message = "Test error message"
+    test_error = ValueError("Test error")
+    
+    debug_error(test_message, test_error)
+    
+    # Check error log file
+    error_log = log_dir / "error.log"
+    assert error_log.exists()
+    
+    # Read error log content
+    content = error_log.read_text()
+    assert test_message in content
+    assert "ValueError" in content
+    assert "Test error" in content
+
+def test_log_aggregation(log_aggregator):
+    """Test log aggregation functionality."""
+    # Test system event logging
+    log_aggregator.log_system_event(
+        "INFO",
+        "test_event",
+        "Test message",
+        {"data": "test"}
+    )
+    
+    # Test learning event logging
+    log_aggregator.log_learning_event(
+        "test_learning",
+        "test_component",
+        component_type="test_type",
+        user_rating=5
+    )
+    
+    # Verify database entries
+    with sqlite3.connect(log_aggregator.db_path) as conn:
+        # Check system events
+        cursor = conn.execute("SELECT * FROM system_events")
+        system_events = cursor.fetchall()
+        assert len(system_events) > 0
+        assert system_events[0][3] == "test_event"
+        
+        # Check learning events
+        cursor = conn.execute("SELECT * FROM learning_events")
+        learning_events = cursor.fetchall()
+        assert len(learning_events) > 0
+        assert learning_events[0][2] == "test_learning"
+
+def test_performance_metrics(perf_metrics):
+    """Test performance metrics tracking."""
+    operation = "test_operation"
+    
+    # Start timing
+    perf_metrics.start_timer(operation)
+    time.sleep(0.1)  # Simulate some work
+    duration = perf_metrics.end_timer(operation)
+    
+    assert duration is not None
+    assert duration >= 0.1  # Should be at least 0.1 seconds
+
+def test_performance_decorator():
+    """Test the performance logging decorator."""
+    @log_performance("decorated_operation")
+    def test_function():
+        time.sleep(0.1)
+        return "success"
+    
+    result = test_function()
+    assert result == "success"
+
+def test_log_learning_events(log_aggregator):
+    """Test learning event logging functions."""
+    # Test component selection logging
+    log_component_selection(
+        "test_component",
+        "test_type",
+        0.8,
+        strategy="test_strategy"
+    )
+    
+    # Test user rating logging
+    log_user_rating(
+        5,
+        "test_component",
+        0.5,
+        0.7
+    )
+    
+    # Test performance update logging
+    log_component_performance_update(
+        "test_component",
+        True,
+        0.5,
+        0.7,
+        0.6,
+        0.8
+    )
+    
+    # Verify database entries
+    with sqlite3.connect(log_aggregator.db_path) as conn:
+        cursor = conn.execute("SELECT * FROM learning_events")
+        events = cursor.fetchall()
+        assert len(events) == 3  # Should have 3 events
+
+def test_sensitive_data_sanitization(log_dir, monkeypatch):
+    """Test that sensitive data is properly sanitized in logs."""
+    monkeypatch.setenv("DEBUG_MODE", "true")
+    
+    # Test API key sanitization
+    debug_log("Test API key", {"key": "sk-1234567890abcdef"})
+    
+    # Test proxy information sanitization
+    debug_log("Test proxy", {"proxy": "http://user:pass@proxy.example.com"})
+    
+    # Read log content
+    log_file = log_dir / "all.log"
+    content = log_file.read_text()
+    
+    # Verify sensitive data is masked
+    assert "sk-***" in content
+    assert "***" in content
+    assert "1234567890abcdef" not in content
+    assert "user:pass" not in content
+
+def test_log_rotation(log_dir, monkeypatch):
+    """Test that logs are properly rotated when they get too large."""
+    monkeypatch.setenv("DEBUG_MODE", "true")
+    
+    # Generate a large log message
+    large_message = "x" * 1000000  # 1MB of data
+    
+    # Write multiple large messages
+    for _ in range(5):
+        debug_log("Large message", {"data": large_message})
+    
+    # Check that log files were created and rotated
+    log_files = list(log_dir.glob("all.log*"))
+    assert len(log_files) > 1  # Should have multiple log files
+
+def test_concurrent_logging(log_aggregator):
+    """Test concurrent logging operations."""
+    import threading
+    
+    def log_worker():
+        for _ in range(100):
+            log_aggregator.log_system_event(
+                "INFO",
+                "concurrent_test",
+                "Test message",
+                {"thread": threading.get_ident()}
+            )
+    
+    # Create multiple threads
+    threads = [threading.Thread(target=log_worker) for _ in range(5)]
+    
+    # Start all threads
+    for thread in threads:
+        thread.start()
+    
+    # Wait for all threads to complete
+    for thread in threads:
+        thread.join()
+    
+    # Verify all logs were written
+    with sqlite3.connect(log_aggregator.db_path) as conn:
+        cursor = conn.execute("SELECT COUNT(*) FROM system_events")
+        count = cursor.fetchone()[0]
+        assert count == 500  # 5 threads * 100 logs each 

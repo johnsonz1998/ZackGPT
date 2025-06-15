@@ -102,7 +102,7 @@ def launch_full_web_application():
         # Start backend server
         backend_process = process_manager.start_process(
             "backend",
-            ["python3", "-m", "server.main"],
+            ["python3", "-m", "uvicorn", "src.zackgpt.web.web_api:app", "--host", "0.0.0.0", "--port", "8000"],
             port=8000
         )
         

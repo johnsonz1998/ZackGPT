@@ -19,8 +19,12 @@ class ZackGPTDatabase:
     """Comprehensive SQLite database for ZackGPT persistence."""
     
     def __init__(self, db_path: str = "data/zackgpt.db"):
-        self.db_path = Path(db_path)
-        self.db_path.parent.mkdir(exist_ok=True)
+        self.db_path_str = db_path
+        if db_path != ":memory:":
+            self.db_path = Path(db_path)
+            self.db_path.parent.mkdir(exist_ok=True)
+        else:
+            self.db_path = db_path  # Keep as string for in-memory
         self.lock = threading.Lock()
         
         # Initialize OpenAI for embeddings
@@ -34,7 +38,9 @@ class ZackGPTDatabase:
     def get_connection(self):
         """Get a database connection with proper locking."""
         with self.lock:
-            conn = sqlite3.connect(str(self.db_path))
+            # Use the string path directly for in-memory, Path object for files
+            db_path = self.db_path if isinstance(self.db_path, str) else str(self.db_path)
+            conn = sqlite3.connect(db_path)
             conn.row_factory = sqlite3.Row
             try:
                 yield conn
