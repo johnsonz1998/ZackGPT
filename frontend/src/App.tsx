@@ -242,6 +242,8 @@ function App() {
   const selectThread = useCallback((thread: Thread) => {
     setSelectedThread(thread);
     loadMessages(thread.id);
+    // Switch to chat view when selecting a thread
+    setCurrentView('chat');
   }, [loadMessages]);
 
   // Delete thread

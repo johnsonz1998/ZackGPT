@@ -1,6 +1,13 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import * as d3 from 'd3';
 import './MemoryGraph.css';
+import { 
+  logMemoryGraphEvent, 
+  logMemoryGraphPerformance, 
+  logMemoryGraphInteraction,
+  logMemoryGraphFiltering,
+  logMemoryGraphVisualization 
+} from '../utils/memoryGraphLogger';
 
 interface Memory {
   id: string;
@@ -49,9 +56,23 @@ const MemoryGraph: React.FC<MemoryGraphProps> = ({
   const [hoveredMemory, setHoveredMemory] = useState<Memory | null>(null);
   const [hiddenTags, setHiddenTags] = useState<Set<string>>(new Set());
 
+  // Log component initialization
+  useEffect(() => {
+    const initStart = performance.now();
+    logMemoryGraphEvent('component_init', {
+      memoriesCount: memories.length,
+      hasSearchQuery: Boolean(searchQuery),
+      initialHiddenTags: hiddenTags.size
+    });
+    logMemoryGraphPerformance('component_init', initStart, {
+      memoriesCount: memories.length
+    });
+  }, [memories.length, searchQuery, hiddenTags.size]);
 
   // Color scheme for different tags
   const tagColors: { [key: string]: string } = useMemo(() => {
+    const colorGenStart = performance.now();
+    
     const baseColors: { [key: string]: string } = {
       identity: '#10a37f',
       family: '#ff6b6b',
@@ -87,11 +108,18 @@ const MemoryGraph: React.FC<MemoryGraphProps> = ({
       }
     });
 
+    logMemoryGraphPerformance('color_generation', colorGenStart, {
+      totalTags: allTags.size,
+      dynamicTagsAssigned: colorIndex
+    });
+
     return finalColors;
   }, [memories]);
 
   // Calculate similarity between two memories (simplified)
   const calculateSimilarity = useCallback((mem1: Memory, mem2: Memory): number => {
+    const similarityStart = performance.now();
+    
     const commonTags = mem1.tags.filter(tag => mem2.tags.includes(tag)).length;
     const totalTags = new Set([...mem1.tags, ...mem2.tags]).size;
     
@@ -106,12 +134,23 @@ const MemoryGraph: React.FC<MemoryGraphProps> = ({
     const commonWords = words1.filter(word => words2.includes(word) && word.length > 3).length;
     const textSimilarity = Math.min(commonWords / Math.max(words1.length, words2.length), 0.5);
     
-    return tagSimilarity + textSimilarity;
+    const result = tagSimilarity + textSimilarity;
+    
+    logMemoryGraphPerformance('similarity_calculation', similarityStart, {
+      commonTags,
+      totalTags,
+      commonWords,
+      similarity: result
+    });
+    
+    return result;
   }, []);
 
   // Smart search function - supports multiple search terms and fuzzy matching
   const matchesSearch = useCallback((memory: Memory, query: string): boolean => {
     if (!query.trim()) return true;
+    
+    const searchStart = performance.now();
     
     const searchTerms = query.toLowerCase().split(' ').filter(term => term.length > 0);
     const searchableText = [
@@ -121,21 +160,33 @@ const MemoryGraph: React.FC<MemoryGraphProps> = ({
       memory.importance.toLowerCase()
     ].join(' ');
     
+    let result = true;
+    
     // Support for exact phrases (quoted search)
     if (query.includes('"')) {
       const exactPhrase = query.match(/"([^"]+)"/)?.[1];
       if (exactPhrase) {
-        return searchableText.includes(exactPhrase.toLowerCase());
+        result = searchableText.includes(exactPhrase.toLowerCase());
       }
+    } else {
+      // All search terms must be found (AND logic)
+      result = searchTerms.every(term => searchableText.includes(term));
     }
     
-    // All search terms must be found (AND logic)
-    return searchTerms.every(term => searchableText.includes(term));
+    logMemoryGraphPerformance('search_match', searchStart, {
+      queryLength: query.length,
+      searchTerms: searchTerms.length,
+      matched: result
+    });
+    
+    return result;
   }, []);
 
   // Filter memories based on search query AND hidden PRIMARY tags
   const filteredMemories = useMemo(() => {
+    const filterStart = performance.now();
     let filtered = memories;
+    const totalBefore = memories.length;
     
     // First filter by hidden PRIMARY tags
     if (hiddenTags.size > 0) {
@@ -150,12 +201,32 @@ const MemoryGraph: React.FC<MemoryGraphProps> = ({
       filtered = filtered.filter(memory => matchesSearch(memory, searchQuery));
     }
     
+    const totalAfter = filtered.length;
+    
+    logMemoryGraphFiltering('memory_filter', {
+      searchQuery,
+      hiddenTagsCount: hiddenTags.size,
+      hiddenTags: Array.from(hiddenTags)
+    }, {
+      totalBefore,
+      totalAfter,
+      filteredCount: totalAfter
+    });
+    
+    logMemoryGraphPerformance('memory_filtering', filterStart, {
+      totalBefore,
+      totalAfter,
+      hiddenTagsCount: hiddenTags.size
+    });
+    
     console.log(`Filtered memories: ${filtered.length} of ${memories.length} (hidden primary tags: ${hiddenTags.size}, search: "${searchQuery}")`);
     return filtered;
   }, [memories, searchQuery, matchesSearch, hiddenTags]);
 
   // Get unique PRIMARY tags from all memories and their counts
   const tagStatus = useMemo(() => {
+    const tagStatusStart = performance.now();
+    
     const allTags = new Set<string>();
     memories.forEach(memory => {
       const primaryTag = memory.tags[0] || 'default';
@@ -184,21 +255,43 @@ const MemoryGraph: React.FC<MemoryGraphProps> = ({
       };
     });
 
+    logMemoryGraphPerformance('tag_status_calculation', tagStatusStart, {
+      totalTags: allTags.size,
+      hiddenTags: hiddenTags.size
+    });
+
     return tagCounts;
   }, [memories, filteredMemories, hiddenTags]);
 
   // Toggle tag visibility
   const toggleTag = useCallback((tag: string) => {
+    const interactionStart = performance.now();
+    
     console.log('Toggling tag:', tag);
     setHiddenTags(prev => {
       const newHidden = new Set(prev);
-      if (newHidden.has(tag)) {
+      const wasHidden = newHidden.has(tag);
+      
+      if (wasHidden) {
         newHidden.delete(tag);
         console.log('Showing tag:', tag);
       } else {
         newHidden.add(tag);
         console.log('Hiding tag:', tag);
       }
+      
+      logMemoryGraphInteraction('tag_toggle', {
+        tag,
+        action: wasHidden ? 'show' : 'hide',
+        totalHiddenAfter: newHidden.size
+      });
+      
+      logMemoryGraphPerformance('tag_toggle', interactionStart, {
+        tag,
+        wasHidden,
+        newHiddenCount: newHidden.size
+      });
+      
       console.log('New hidden tags:', Array.from(newHidden));
       return newHidden;
     });
@@ -206,25 +299,58 @@ const MemoryGraph: React.FC<MemoryGraphProps> = ({
 
   // Select all tags (show all)
   const selectAll = useCallback(() => {
+    const interactionStart = performance.now();
+    
+    logMemoryGraphInteraction('select_all', {
+      previousHiddenCount: hiddenTags.size,
+      previousHiddenTags: Array.from(hiddenTags)
+    });
+    
     setHiddenTags(new Set());
-  }, []);
+    
+    logMemoryGraphPerformance('select_all', interactionStart, {
+      clearedTagsCount: hiddenTags.size
+    });
+  }, [hiddenTags]);
 
   // Select none (hide all)
   const selectNone = useCallback(() => {
+    const interactionStart = performance.now();
+    
     // Get all PRIMARY tags from memories
     const allPrimaryTags = new Set<string>();
     memories.forEach(memory => {
       const primaryTag = memory.tags[0] || 'default';
       allPrimaryTags.add(primaryTag);
     });
+    
+    logMemoryGraphInteraction('select_none', {
+      previousHiddenCount: hiddenTags.size,
+      totalTagsToHide: allPrimaryTags.size,
+      tagsToHide: Array.from(allPrimaryTags)
+    });
+    
     console.log('Select None - hiding all primary tags:', Array.from(allPrimaryTags));
     setHiddenTags(new Set(allPrimaryTags));
-  }, [memories]);
+    
+    logMemoryGraphPerformance('select_none', interactionStart, {
+      hiddenTagsCount: allPrimaryTags.size
+    });
+  }, [memories, hiddenTags]);
 
   useEffect(() => {
+    const renderStart = performance.now();
+    
     console.log('MemoryGraph received memories:', memories.length);
     console.log('Filtered memories:', filteredMemories.length);
     console.log('Search query:', searchQuery);
+    
+    logMemoryGraphEvent('render_start', {
+      totalMemories: memories.length,
+      filteredMemories: filteredMemories.length,
+      searchQuery,
+      hiddenTagsCount: hiddenTags.size
+    });
     
     if (!svgRef.current || filteredMemories.length === 0) {
       console.log('Early return: svgRef.current =', svgRef.current, 'filteredMemories.length =', filteredMemories.length);
@@ -233,8 +359,16 @@ const MemoryGraph: React.FC<MemoryGraphProps> = ({
         const svg = d3.select(svgRef.current);
         svg.selectAll('*').remove();
       }
+      
+      logMemoryGraphEvent('render_skipped', {
+        reason: !svgRef.current ? 'no_svg_ref' : 'no_filtered_memories',
+        filteredMemoriesCount: filteredMemories.length
+      });
+      
       return;
     }
+
+    const processStart = performance.now();
 
     // Process memories into nodes and links
     const processMemories = (memories: Memory[]) => {
@@ -283,8 +417,17 @@ const MemoryGraph: React.FC<MemoryGraphProps> = ({
     svg.attr('width', width).attr('height', height);
 
     const { nodes, links } = processMemories(filteredMemories);
+    
+    logMemoryGraphPerformance('memory_processing', processStart, {
+      nodeCount: nodes.length,
+      linkCount: links.length,
+      memoryCount: filteredMemories.length
+    });
+    
     console.log('Processed nodes:', nodes.length);
     console.log('Processed links:', links.length);
+
+    const simulationStart = performance.now();
 
     // Create simulation
     const simulation = d3.forceSimulation<MemoryNode>(nodes)
@@ -297,6 +440,13 @@ const MemoryGraph: React.FC<MemoryGraphProps> = ({
       .force('center', d3.forceCenter(width / 2, height / 2))
       .force('collision', d3.forceCollide().radius((d: d3.SimulationNodeDatum) => (d as MemoryNode).radius + 2));
 
+    logMemoryGraphPerformance('d3_simulation_setup', simulationStart, {
+      nodeCount: nodes.length,
+      linkCount: links.length
+    });
+
+    const visualStart = performance.now();
+
     // Create container group
     const container = svg.append('g');
 
@@ -305,6 +455,11 @@ const MemoryGraph: React.FC<MemoryGraphProps> = ({
       .scaleExtent([0.1, 4])
       .on('zoom', (event: d3.D3ZoomEvent<SVGSVGElement, unknown>) => {
         container.attr('transform', event.transform.toString());
+        logMemoryGraphInteraction('zoom', {
+          scale: event.transform.k,
+          translateX: event.transform.x,
+          translateY: event.transform.y
+        });
       });
 
     svg.call(zoom);
@@ -371,6 +526,10 @@ const MemoryGraph: React.FC<MemoryGraphProps> = ({
         if (!event.active) simulation.alphaTarget(0.3).restart();
         d.fx = d.x;
         d.fy = d.y;
+        logMemoryGraphInteraction('drag_start', {
+          nodeId: d.id,
+          position: { x: d.x, y: d.y }
+        });
       })
       .on('drag', (event: d3.D3DragEvent<SVGCircleElement, MemoryNode, MemoryNode>, d: MemoryNode) => {
         d.fx = event.x;
@@ -380,6 +539,10 @@ const MemoryGraph: React.FC<MemoryGraphProps> = ({
         if (!event.active) simulation.alphaTarget(0);
         d.fx = null;
         d.fy = null;
+        logMemoryGraphInteraction('drag_end', {
+          nodeId: d.id,
+          finalPosition: { x: event.x, y: event.y }
+        });
       });
 
     node.call(drag);
@@ -387,6 +550,12 @@ const MemoryGraph: React.FC<MemoryGraphProps> = ({
     // Add hover and click events
     node
       .on('mouseover', (event: MouseEvent, d: MemoryNode) => {
+        logMemoryGraphInteraction('node_hover_start', {
+          nodeId: d.id,
+          tags: d.tags,
+          importance: d.importance
+        });
+        
         setHoveredMemory({
           id: d.id,
           question: d.question,
@@ -397,6 +566,7 @@ const MemoryGraph: React.FC<MemoryGraphProps> = ({
         });
       })
       .on('mouseout', () => {
+        logMemoryGraphInteraction('node_hover_end');
         setHoveredMemory(null);
       })
       .on('click', (event: MouseEvent, d: MemoryNode) => {
@@ -408,6 +578,14 @@ const MemoryGraph: React.FC<MemoryGraphProps> = ({
           importance: d.importance,
           timestamp: d.timestamp
         };
+        
+        logMemoryGraphInteraction('node_click', {
+          nodeId: d.id,
+          tags: d.tags,
+          importance: d.importance,
+          hasCallback: Boolean(onMemoryClick)
+        });
+        
         setSelectedMemory(memory);
         onMemoryClick?.(memory);
       });
@@ -429,9 +607,27 @@ const MemoryGraph: React.FC<MemoryGraphProps> = ({
         .attr('y', (d: MemoryNode) => d.y!);
     });
 
+    logMemoryGraphPerformance('d3_visualization_setup', visualStart, {
+      nodeCount: nodes.length,
+      linkCount: links.length,
+      renderTime: performance.now() - visualStart
+    });
+
+    logMemoryGraphVisualization('render_complete', {
+      totalRenderTime: performance.now() - renderStart,
+      nodeCount: nodes.length,
+      linkCount: links.length,
+      simulationSetupTime: performance.now() - simulationStart,
+      visualSetupTime: performance.now() - visualStart
+    });
+
     // Cleanup
     return () => {
       simulation.stop();
+      logMemoryGraphEvent('render_cleanup', {
+        nodeCount: nodes.length,
+        linkCount: links.length
+      });
     };
   }, [filteredMemories, searchQuery, onMemoryClick, tagColors, calculateSimilarity, hiddenTags, memories.length]);
 
