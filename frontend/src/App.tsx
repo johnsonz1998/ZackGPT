@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { MessageSquare, Plus, Settings, Send, X } from 'lucide-react';
+import { MessageSquare, Plus, Settings, Send, X, Brain } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { v4 as uuidv4 } from 'uuid';
@@ -39,6 +39,7 @@ function App() {
   const [currentMessage, setCurrentMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [currentView, setCurrentView] = useState<'chat' | 'memories'>('chat');
 
   const [showSettings, setShowSettings] = useState(false);
   
@@ -277,11 +278,19 @@ function App() {
           <button 
             className="zackgpt-title"
             onClick={() => {
+              setCurrentView('chat');
               setSelectedThread(null);
               setMessages([]);
             }}
           >
             ZackGPT
+          </button>
+          <button 
+            className={`nav-btn ${currentView === 'memories' ? 'active' : ''}`}
+            onClick={() => setCurrentView('memories')}
+          >
+            <Brain size={16} />
+            Memories
           </button>
           <button className="new-chat-btn" onClick={() => createNewThread()}>
             <Plus size={16} />
@@ -333,7 +342,15 @@ function App() {
 
       {/* Main Content */}
       <div className="main-content">
-        {!selectedThread ? (
+        {currentView === 'memories' ? (
+          /* Memories View */
+          <div className="memories-view">
+            <div className="memories-content">
+              <h1>Your Memories</h1>
+              <p>Memory management interface coming soon...</p>
+            </div>
+          </div>
+        ) : !selectedThread ? (
           /* Welcome Screen */
           <div className="welcome-screen">
             <div className="welcome-content">
