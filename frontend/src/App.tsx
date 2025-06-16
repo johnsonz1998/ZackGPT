@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { v4 as uuidv4 } from 'uuid';
 import SettingsModal from './components/Settings';
+import MemoryGraph from './components/MemoryGraph';
 import './App.css';
 
 interface ChatMessage {
@@ -20,6 +21,15 @@ interface Thread {
   created_at: Date;
   updated_at: Date;
   message_count: number;
+}
+
+interface Memory {
+  id: string;
+  question: string;
+  answer: string;
+  tags: string[];
+  importance: 'high' | 'medium' | 'low';
+  timestamp: string;
 }
 
 interface WSMessage {
@@ -40,6 +50,8 @@ function App() {
   const [isTyping, setIsTyping] = useState(false);
   const [connected, setConnected] = useState(false);
   const [currentView, setCurrentView] = useState<'chat' | 'memories'>('chat');
+  const [memories, setMemories] = useState<Memory[]>([]);
+  const [memorySearchQuery, setMemorySearchQuery] = useState('');
 
   const [showSettings, setShowSettings] = useState(false);
   
@@ -122,6 +134,19 @@ function App() {
       }
     } catch (error) {
       console.error('Failed to load threads:', error);
+    }
+  }, []);
+
+  // Load memories from API
+  const loadMemories = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_BASE}/memories`);
+      if (response.ok) {
+        const memoriesData = await response.json();
+        setMemories(memoriesData);
+      }
+    } catch (error) {
+      console.error('Failed to load memories:', error);
     }
   }, []);
 
@@ -256,6 +281,7 @@ function App() {
   // Initialize
   useEffect(() => {
     loadThreads();
+    loadMemories();
     connectWebSocket();
     
     return () => {
@@ -263,7 +289,7 @@ function App() {
         wsRef.current.close();
       }
     };
-  }, [loadThreads, connectWebSocket]);
+  }, [loadThreads, loadMemories, connectWebSocket]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -345,9 +371,26 @@ function App() {
         {currentView === 'memories' ? (
           /* Memories View */
           <div className="memories-view">
-            <div className="memories-content">
-              <h1>Your Memories</h1>
-              <p>Memory management interface coming soon...</p>
+            <div className="memories-header">
+              <h1>Your Memory Web</h1>
+              <div className="memory-search">
+                <input
+                  type="text"
+                  placeholder="Search memories..."
+                  value={memorySearchQuery}
+                  onChange={(e) => setMemorySearchQuery(e.target.value)}
+                  className="memory-search-input"
+                />
+              </div>
+            </div>
+            <div className="memory-graph-container">
+              <MemoryGraph 
+                memories={memories}
+                searchQuery={memorySearchQuery}
+                onMemoryClick={(memory) => {
+                  console.log('Memory clicked:', memory);
+                }}
+              />
             </div>
           </div>
         ) : !selectedThread ? (

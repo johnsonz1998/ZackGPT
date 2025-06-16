@@ -391,6 +391,30 @@ async def update_api_keys(api_keys: Dict[str, str]):
             "message": f"Failed to update API keys: {str(e)}"
         }
 
+@app.get("/memories")
+async def get_memories():
+    """Get all memories for the memory graph visualization."""
+    try:
+        # Use the persistent memory manager to get all memories
+        memories = memory_manager.db.memories.find().sort("timestamp", -1)
+        
+        result = []
+        for memory in memories:
+            result.append({
+                "id": str(memory["_id"]),
+                "question": memory["question"],
+                "answer": memory["answer"],
+                "tags": memory.get("tags", []),
+                "importance": memory.get("importance", "medium"),
+                "timestamp": memory["timestamp"].isoformat() if hasattr(memory.get("timestamp"), 'isoformat') else str(memory.get("timestamp")) if memory.get("timestamp") else None
+            })
+        
+        debug_info(f"Retrieved {len(result)} memories for graph visualization")
+        return result
+    except Exception as e:
+        debug_error("Failed to get memories", e)
+        raise HTTPException(status_code=500, detail=f"Failed to get memories: {str(e)}")
+
 @app.post("/config/reset", response_model=ZackGPTConfig)
 async def reset_config():
     """Reset configuration to defaults."""
