@@ -5,7 +5,9 @@ import remarkGfm from 'remark-gfm';
 import { v4 as uuidv4 } from 'uuid';
 import SettingsModal from './components/Settings';
 import MemoryGraph from './components/MemoryGraph';
+import MemoryNotification from './components/MemoryNotification';
 import './App.css';
+import './components/MemoryNotification.css';
 
 interface ChatMessage {
   id: string;
@@ -52,6 +54,7 @@ function App() {
   const [currentView, setCurrentView] = useState<'chat' | 'memories'>('chat');
   const [memories, setMemories] = useState<Memory[]>([]);
   const [memorySearchQuery, setMemorySearchQuery] = useState('');
+  const [memoryNotifications, setMemoryNotifications] = useState<any[]>([]);
 
   const [showSettings, setShowSettings] = useState(false);
   
@@ -100,6 +103,15 @@ function App() {
         }
       } else if (wsMessage.type === 'typing') {
         setIsTyping(wsMessage.typing || false);
+      } else if (wsMessage.type === 'memory_notification') {
+        // Handle memory save notification
+        if (wsMessage.data) {
+          setMemoryNotifications(prev => [...prev, {
+            id: uuidv4(),
+            ...wsMessage.data,
+            timestamp: new Date()
+          }]);
+        }
       } else if (wsMessage.type === 'error') {
         console.error('WebSocket error:', wsMessage.message);
       }
@@ -482,6 +494,19 @@ function App() {
         isOpen={showSettings} 
         onClose={() => setShowSettings(false)} 
       />
+      
+      {/* Memory Notifications */}
+      {memoryNotifications.map((notification, index) => (
+        <MemoryNotification
+          key={notification.id}
+          notification={notification}
+          onClose={() => {
+            setMemoryNotifications(prev => 
+              prev.filter(n => n.id !== notification.id)
+            );
+          }}
+        />
+      ))}
     </div>
   );
 }

@@ -245,6 +245,30 @@ class PersistentMemoryManager:
             tags=tags
         )
     
+    def save_interaction_with_notification(self, question: str, answer: str, agent: str = "core_assistant", 
+                                         thread_id: str = None) -> Optional[Dict[str, Any]]:
+        """Save interaction and return notification data if memory was created"""
+        memory_id = self.save_interaction(question, answer, agent)
+        
+        if memory_id:
+            # Extract metadata for the notification
+            tags = self.extract_tags(question, answer)
+            fact = self.extract_fact(question)
+            
+            notification_data = {
+                "memory_id": memory_id,
+                "message": "💭 Saved new memory from this conversation",
+                "tags": tags,
+                "fact": fact,
+                "thread_id": thread_id,
+                "question_preview": question[:50] + "..." if len(question) > 50 else question
+            }
+            
+            debug_success("Memory saved with notification", notification_data)
+            return notification_data
+        
+        return None
+    
     def get_stats(self) -> Dict[str, Any]:
         """Get memory statistics."""
         return self.db.get_stats()["memories"]

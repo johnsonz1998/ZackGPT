@@ -480,8 +480,10 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                     # Add assistant message to database
                     assistant_message = thread_manager.add_assistant_message(thread_id, ai_response)
                     
-                    # Save interaction to memory if appropriate
-                    memory_manager.save_interaction(content, ai_response)
+                    # Save interaction to memory and get notification
+                    memory_notification = memory_manager.save_interaction_with_notification(
+                        content, ai_response, agent="core_assistant", thread_id=thread_id
+                    )
                     
                     # Send typing indicator off
                     await websocket.send_text(json.dumps({
@@ -494,6 +496,13 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                         "type": "message",
                         "data": assistant_message.model_dump(mode='json')
                     }))
+                    
+                    # Send memory notification if memory was created
+                    if memory_notification:
+                        await websocket.send_text(json.dumps({
+                            "type": "memory_notification",
+                            "data": memory_notification
+                        }))
                     
                 except Exception as e:
                     debug_error("Error processing WebSocket message", e)

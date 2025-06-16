@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Memory Notification Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .log { background: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .notification { background: #e8f5e8; padding: 10px; margin: 10px 0; border-radius: 5px; border-left: 4px solid #4caf50; }
+        button { padding: 10px 20px; margin: 5px; }
+        input { padding: 8px; width: 300px; margin: 5px; }
+    </style>
+</head>
+<body>
+    <h1>ZackGPT Memory Notification Test</h1>
+    
+    <div>
+        <input type="text" id="messageInput" placeholder="Type a message..." value="My name is John Smith">
+        <button onclick="sendMessage()">Send Message</button>
+        <button onclick="connect()">Connect WebSocket</button>
+        <button onclick="disconnect()">Disconnect</button>
+    </div>
+    
+    <div id="status">Disconnected</div>
+    <div id="logs"></div>
+    
+    <script>
+        let ws = null;
+        const clientId = 'test-client-' + Math.random().toString(36).substr(2, 9);
+        
+        function log(message) {
+            const logs = document.getElementById('logs');
+            const div = document.createElement('div');
+            div.className = 'log';
+            div.innerHTML = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logs.appendChild(div);
+            logs.scrollTop = logs.scrollHeight;
+        }
+        
+        function showNotification(data) {
+            const logs = document.getElementById('logs');
+            const div = document.createElement('div');
+            div.className = 'notification';
+            div.innerHTML = `
+                <strong>🧠 Memory Notification!</strong><br>
+                Message: ${data.message}<br>
+                Preview: ${data.question_preview}<br>
+                Tags: ${data.tags ? data.tags.join(', ') : 'none'}<br>
+                Fact: ${data.fact || 'none'}
+            `;
+            logs.appendChild(div);
+            logs.scrollTop = logs.scrollHeight;
+        }
+        
+        function connect() {
+            if (ws) {
+                ws.close();
+            }
+            
+            ws = new WebSocket(`ws://localhost:8001/ws/${clientId}`);
+            
+            ws.onopen = function() {
+                document.getElementById('status').textContent = 'Connected';
+                log('WebSocket connected');
+            };
+            
+            ws.onmessage = function(event) {
+                const message = JSON.parse(event.data);
+                log(`Received: ${JSON.stringify(message, null, 2)}`);
+                
+                if (message.type === 'memory_notification') {
+                    showNotification(message.data);
+                }
+            };
+            
+            ws.onclose = function() {
+                document.getElementById('status').textContent = 'Disconnected';
+                log('WebSocket disconnected');
+            };
+            
+            ws.onerror = function(error) {
+                log(`WebSocket error: ${error}`);
+            };
+        }
+        
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+        
+        function sendMessage() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                log('WebSocket not connected');
+                return;
+            }
+            
+            const message = document.getElementById('messageInput').value;
+            if (!message.trim()) {
+                log('Please enter a message');
+                return;
+            }
+            
+            // Create a test thread first
+            const threadId = 'test-thread-' + Date.now();
+            
+            const payload = {
+                action: 'send_message',
+                thread_id: threadId,
+                content: message,
+                force_web_search: false
+            };
+            
+            log(`Sending: ${JSON.stringify(payload)}`);
+            ws.send(JSON.stringify(payload));
+        }
+        
+        // Auto-connect on page load
+        window.onload = function() {
+            connect();
+        };
+    </script>
+</body>
+</html> 

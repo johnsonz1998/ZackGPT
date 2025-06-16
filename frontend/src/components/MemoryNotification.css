@@ -1,0 +1,197 @@
+/* Memory Notification Styles */
+.memory-notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  max-width: 400px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  color: white;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(10px);
+}
+
+.memory-notification.entering {
+  animation: slideInFromRight 0.3s ease-out;
+}
+
+.memory-notification.exiting {
+  animation: slideOutToRight 0.3s ease-in;
+}
+
+@keyframes slideInFromRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOutToRight {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+.memory-notification-content {
+  padding: 16px;
+}
+
+.memory-notification-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+  position: relative;
+}
+
+.memory-icon {
+  font-size: 20px;
+  margin-right: 8px;
+}
+
+.memory-message {
+  flex: 1;
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.memory-notification-close {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+  margin-left: 8px;
+}
+
+.memory-notification-close:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.memory-notification-body {
+  font-size: 13px;
+  line-height: 1.5;
+  opacity: 0.95;
+}
+
+.memory-preview {
+  margin-bottom: 8px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  border-left: 3px solid rgba(255, 255, 255, 0.3);
+}
+
+.memory-tags {
+  margin-bottom: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.memory-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: lowercase;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+/* Tag-specific colors */
+.memory-tag-identity {
+  background: rgba(255, 193, 7, 0.3);
+  border-color: rgba(255, 193, 7, 0.5);
+}
+
+.memory-tag-preferences {
+  background: rgba(156, 39, 176, 0.3);
+  border-color: rgba(156, 39, 176, 0.5);
+}
+
+.memory-tag-family {
+  background: rgba(233, 30, 99, 0.3);
+  border-color: rgba(233, 30, 99, 0.5);
+}
+
+.memory-tag-work {
+  background: rgba(63, 81, 181, 0.3);
+  border-color: rgba(63, 81, 181, 0.5);
+}
+
+.memory-tag-memory {
+  background: rgba(0, 150, 136, 0.3);
+  border-color: rgba(0, 150, 136, 0.5);
+}
+
+.memory-fact {
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  border-left: 3px solid rgba(76, 175, 80, 0.6);
+}
+
+/* Responsive design */
+@media (max-width: 480px) {
+  .memory-notification {
+    left: 20px;
+    right: 20px;
+    max-width: none;
+  }
+  
+  .memory-notification.entering {
+    animation: slideInFromTop 0.3s ease-out;
+  }
+  
+  .memory-notification.exiting {
+    animation: slideOutToTop 0.3s ease-in;
+  }
+  
+  @keyframes slideInFromTop {
+    from {
+      transform: translateY(-100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+  
+  @keyframes slideOutToTop {
+    from {
+      transform: translateY(0);
+      opacity: 1;
+    }
+    to {
+      transform: translateY(-100%);
+      opacity: 0;
+    }
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .memory-notification {
+    background: linear-gradient(135deg, #2d3748 0%, #4a5568 100%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+} 
