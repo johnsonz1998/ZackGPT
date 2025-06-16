@@ -1,122 +1,75 @@
 """
-ZackGPT Database Manager - SQLite-based persistence for threads, messages, and memories
+ZackGPT Database Manager - MongoDB-based persistence for all data
 """
-import sqlite3
 import json
 import uuid
+import os
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional, Any, Tuple
-from pathlib import Path
+from typing import List, Dict, Optional, Any
 import threading
-from contextlib import contextmanager
 import numpy as np
 from openai import OpenAI
+from pymongo import MongoClient, ASCENDING, DESCENDING
+from pymongo.collection import Collection
+from pymongo.database import Database
+from pymongo.errors import ConnectionFailure
+from bson import ObjectId
 
 from .logger import debug_success, debug_error, debug_info, debug_warning
 
 
 class ZackGPTDatabase:
-    """Comprehensive SQLite database for ZackGPT persistence."""
+    """Comprehensive MongoDB database for ZackGPT persistence."""
     
-    def __init__(self, db_path: str = "data/zackgpt.db"):
-        self.db_path_str = db_path
-        if db_path != ":memory:":
-            self.db_path = Path(db_path)
-            self.db_path.parent.mkdir(exist_ok=True)
-        else:
-            self.db_path = db_path  # Keep as string for in-memory
+    def __init__(self, mongo_uri: str = None):
+        self.mongo_uri = mongo_uri or os.getenv("MONGODB_URI", "mongodb://localhost:27017")
+        self.client = MongoClient(self.mongo_uri)
+        self.db: Database = self.client.zackgpt
         self.lock = threading.Lock()
+        
+        # Collections
+        self.threads: Collection = self.db.threads
+        self.messages: Collection = self.db.messages
+        self.memories: Collection = self.db.memories
+        self.user_settings: Collection = self.db.user_settings
+        self.sessions: Collection = self.db.sessions
         
         # Initialize OpenAI for embeddings
         self.openai_client = OpenAI()
         self.embedding_model = "text-embedding-3-small"
         
-        self._init_database()
-        debug_success("ZackGPT Database initialized", {"path": str(self.db_path)})
+        self._setup_indexes()
+        debug_success("ZackGPT MongoDB Database initialized", {"uri": self.mongo_uri})
     
-    @contextmanager
-    def get_connection(self):
-        """Get a database connection with proper locking."""
-        with self.lock:
-            # Use the string path directly for in-memory, Path object for files
-            db_path = self.db_path if isinstance(self.db_path, str) else str(self.db_path)
-            conn = sqlite3.connect(db_path)
-            conn.row_factory = sqlite3.Row
-            try:
-                yield conn
-            finally:
-                conn.close()
-    
-    def _init_database(self):
-        """Initialize all database tables."""
-        with self.get_connection() as conn:
-            # Threads table
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS threads (
-                    id TEXT PRIMARY KEY,
-                    title TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    message_count INTEGER DEFAULT 0,
-                    metadata TEXT  -- JSON field for additional data
-                )
-            """)
+    def _setup_indexes(self):
+        """Create necessary indexes for efficient querying."""
+        try:
+            # Threads indexes
+            self.threads.create_index([("updated_at", DESCENDING)])
+            self.threads.create_index([("created_at", DESCENDING)])
             
-            # Messages table
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS messages (
-                    id TEXT PRIMARY KEY,
-                    thread_id TEXT NOT NULL,
-                    role TEXT NOT NULL,  -- 'user' or 'assistant'
-                    content TEXT NOT NULL,
-                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    metadata TEXT,  -- JSON field for additional data
-                    FOREIGN KEY (thread_id) REFERENCES threads (id) ON DELETE CASCADE
-                )
-            """)
+            # Messages indexes
+            self.messages.create_index([("thread_id", ASCENDING)])
+            self.messages.create_index([("timestamp", ASCENDING)])
+            self.messages.create_index([("thread_id", ASCENDING), ("timestamp", ASCENDING)])
             
-            # Memories table
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS memories (
-                    id TEXT PRIMARY KEY,
-                    question TEXT NOT NULL,
-                    answer TEXT NOT NULL,
-                    agent TEXT DEFAULT 'core_assistant',
-                    importance TEXT DEFAULT 'medium',
-                    tags TEXT,  -- JSON array of tags
-                    embedding TEXT,  -- JSON array of embedding values
-                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    metadata TEXT  -- JSON field for additional data
-                )
-            """)
+            # Memories indexes
+            self.memories.create_index([("question", "text"), ("answer", "text")])
+            self.memories.create_index([("timestamp", DESCENDING)])
+            self.memories.create_index([("importance", ASCENDING)])
+            self.memories.create_index([("tags", ASCENDING)])
+            self.memories.create_index([("agent", ASCENDING)])
             
-            # User preferences/settings table
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS user_settings (
-                    key TEXT PRIMARY KEY,
-                    value TEXT NOT NULL,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
+            # Settings indexes
+            self.user_settings.create_index([("key", ASCENDING)], unique=True)
             
-            # Session data table
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS sessions (
-                    session_id TEXT PRIMARY KEY,
-                    data TEXT NOT NULL,  -- JSON field
-                    expires_at TIMESTAMP,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
+            # Sessions indexes
+            self.sessions.create_index([("expires_at", ASCENDING)])
+            self.sessions.create_index([("created_at", DESCENDING)])
             
-            # Create indexes for better performance
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_thread ON messages(thread_id)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_timestamp ON memories(timestamp)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_agent ON memories(agent)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_threads_updated ON threads(updated_at)")
-            
-            conn.commit()
+            debug_success("Created MongoDB indexes")
+        except Exception as e:
+            debug_error("Failed to create indexes", e)
     
     # =============================
     #        THREAD OPERATIONS
@@ -127,93 +80,77 @@ class ZackGPTDatabase:
         if not thread_id:
             thread_id = str(uuid.uuid4())
         
-        with self.get_connection() as conn:
-            conn.execute("""
-                INSERT INTO threads (id, title, created_at, updated_at, message_count)
-                VALUES (?, ?, ?, ?, 0)
-            """, (thread_id, title, datetime.now(), datetime.now()))
-            conn.commit()
+        thread_doc = {
+            "_id": thread_id,
+            "title": title,
+            "created_at": datetime.now(),
+            "updated_at": datetime.now(),
+            "message_count": 0,
+            "metadata": {}
+        }
         
+        self.threads.insert_one(thread_doc)
         debug_success("Created thread", {"id": thread_id, "title": title})
         return self.get_thread(thread_id)
     
     def get_thread(self, thread_id: str) -> Optional[Dict[str, Any]]:
         """Get a specific thread by ID."""
-        with self.get_connection() as conn:
-            row = conn.execute("""
-                SELECT id, title, created_at, updated_at, message_count, metadata
-                FROM threads WHERE id = ?
-            """, (thread_id,)).fetchone()
-            
-            if row:
-                return {
-                    "id": row["id"],
-                    "title": row["title"],
-                    "created_at": row["created_at"],
-                    "updated_at": row["updated_at"],
-                    "message_count": row["message_count"],
-                    "metadata": json.loads(row["metadata"]) if row["metadata"] else {}
-                }
+        thread = self.threads.find_one({"_id": thread_id})
+        if thread:
+            return {
+                "id": thread["_id"],
+                "title": thread["title"],
+                "created_at": thread["created_at"],
+                "updated_at": thread["updated_at"],
+                "message_count": thread["message_count"],
+                "metadata": thread.get("metadata", {})
+            }
         return None
     
     def get_all_threads(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Get all threads, ordered by updated_at desc."""
-        with self.get_connection() as conn:
-            rows = conn.execute("""
-                SELECT id, title, created_at, updated_at, message_count, metadata
-                FROM threads 
-                ORDER BY updated_at DESC 
-                LIMIT ? OFFSET ?
-            """, (limit, offset)).fetchall()
-            
-            return [{
-                "id": row["id"],
-                "title": row["title"],
-                "created_at": row["created_at"],
-                "updated_at": row["updated_at"],
-                "message_count": row["message_count"],
-                "metadata": json.loads(row["metadata"]) if row["metadata"] else {}
-            } for row in rows]
+        threads = self.threads.find().sort("updated_at", DESCENDING).skip(offset).limit(limit)
+        
+        return [{
+            "id": thread["_id"],
+            "title": thread["title"],
+            "created_at": thread["created_at"],
+            "updated_at": thread["updated_at"],
+            "message_count": thread["message_count"],
+            "metadata": thread.get("metadata", {})
+        } for thread in threads]
     
     def update_thread(self, thread_id: str, **updates) -> bool:
         """Update thread properties."""
-        set_clauses = []
-        values = []
+        update_data = {}
         
         for key, value in updates.items():
             if key in ["title", "metadata"]:
-                set_clauses.append(f"{key} = ?")
-                values.append(json.dumps(value) if key == "metadata" else value)
+                update_data[key] = value
         
-        if not set_clauses:
+        if not update_data:
             return False
         
-        set_clauses.append("updated_at = ?")
-        values.append(datetime.now())
-        values.append(thread_id)
+        update_data["updated_at"] = datetime.now()
         
-        with self.get_connection() as conn:
-            cursor = conn.execute(f"""
-                UPDATE threads SET {', '.join(set_clauses)}
-                WHERE id = ?
-            """, values)
-            conn.commit()
-            return cursor.rowcount > 0
+        result = self.threads.update_one(
+            {"_id": thread_id},
+            {"$set": update_data}
+        )
+        return result.modified_count > 0
     
     def delete_thread(self, thread_id: str) -> bool:
         """Delete a thread and all its messages."""
-        with self.get_connection() as conn:
-            # Delete messages first (though CASCADE should handle this)
-            conn.execute("DELETE FROM messages WHERE thread_id = ?", (thread_id,))
-            
-            # Delete the thread
-            cursor = conn.execute("DELETE FROM threads WHERE id = ?", (thread_id,))
-            conn.commit()
-            
-            deleted = cursor.rowcount > 0
-            if deleted:
-                debug_info("Deleted thread", {"id": thread_id})
-            return deleted
+        # Delete messages first
+        self.messages.delete_many({"thread_id": thread_id})
+        
+        # Delete the thread
+        result = self.threads.delete_one({"_id": thread_id})
+        
+        deleted = result.deleted_count > 0
+        if deleted:
+            debug_info("Deleted thread", {"id": thread_id})
+        return deleted
     
     # =============================
     #        MESSAGE OPERATIONS
@@ -225,68 +162,60 @@ class ZackGPTDatabase:
         if not message_id:
             message_id = str(uuid.uuid4())
         
-        with self.get_connection() as conn:
-            # Insert the message
-            conn.execute("""
-                INSERT INTO messages (id, thread_id, role, content, timestamp, metadata)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (
-                message_id, thread_id, role, content, 
-                datetime.now(), 
-                json.dumps(metadata) if metadata else None
-            ))
-            
-            # Update thread message count and updated_at
-            conn.execute("""
-                UPDATE threads SET 
-                    message_count = (SELECT COUNT(*) FROM messages WHERE thread_id = ?),
-                    updated_at = ?
-                WHERE id = ?
-            """, (thread_id, datetime.now(), thread_id))
-            
-            conn.commit()
+        message_doc = {
+            "_id": message_id,
+            "thread_id": thread_id,
+            "role": role,
+            "content": content,
+            "timestamp": datetime.now(),
+            "metadata": metadata or {}
+        }
+        
+        self.messages.insert_one(message_doc)
+        
+        # Update thread message count and updated_at
+        message_count = self.messages.count_documents({"thread_id": thread_id})
+        self.threads.update_one(
+            {"_id": thread_id},
+            {
+                "$set": {
+                    "message_count": message_count,
+                    "updated_at": datetime.now()
+                }
+            }
+        )
         
         debug_info("Added message", {"thread_id": thread_id, "role": role})
         return self.get_message(message_id)
     
     def get_message(self, message_id: str) -> Optional[Dict[str, Any]]:
         """Get a specific message by ID."""
-        with self.get_connection() as conn:
-            row = conn.execute("""
-                SELECT id, thread_id, role, content, timestamp, metadata
-                FROM messages WHERE id = ?
-            """, (message_id,)).fetchone()
-            
-            if row:
-                return {
-                    "id": row["id"],
-                    "thread_id": row["thread_id"],
-                    "role": row["role"],
-                    "content": row["content"],
-                    "timestamp": row["timestamp"],
-                    "metadata": json.loads(row["metadata"]) if row["metadata"] else {}
-                }
+        message = self.messages.find_one({"_id": message_id})
+        if message:
+            return {
+                "id": message["_id"],
+                "thread_id": message["thread_id"],
+                "role": message["role"],
+                "content": message["content"],
+                "timestamp": message["timestamp"],
+                "metadata": message.get("metadata", {})
+            }
         return None
     
     def get_thread_messages(self, thread_id: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Get all messages in a thread."""
-        with self.get_connection() as conn:
-            rows = conn.execute("""
-                SELECT id, thread_id, role, content, timestamp, metadata
-                FROM messages 
-                WHERE thread_id = ? 
-                ORDER BY timestamp ASC 
-                LIMIT ? OFFSET ?
-            """, (thread_id, limit, offset)).fetchall()
-            
-            return [{
-                "id": row["id"],
-                "thread_id": row["thread_id"],
-                "role": row["role"],
-                "content": row["content"],
-                "timestamp": row["timestamp"],
-                "metadata": json.loads(row["metadata"]) if row["metadata"] else {}
-            } for row in rows]
+        messages = self.messages.find(
+            {"thread_id": thread_id}
+        ).sort("timestamp", ASCENDING).skip(offset).limit(limit)
+        
+        return [{
+            "id": message["_id"],
+            "thread_id": message["thread_id"],
+            "role": message["role"],
+            "content": message["content"],
+            "timestamp": message["timestamp"],
+            "metadata": message.get("metadata", {})
+        } for message in messages]
     
     # =============================
     #        MEMORY OPERATIONS
@@ -344,17 +273,19 @@ class ZackGPTDatabase:
             
             memory_id = str(uuid.uuid4())
             
-            with self.get_connection() as conn:
-                conn.execute("""
-                    INSERT INTO memories (id, question, answer, agent, importance, tags, embedding, timestamp)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    memory_id, question, answer, agent, importance,
-                    json.dumps(tags or []),
-                    json.dumps(embedding),
-                    datetime.now()
-                ))
-                conn.commit()
+            memory_doc = {
+                "_id": memory_id,
+                "question": question,
+                "answer": answer,
+                "agent": agent,
+                "importance": importance,
+                "tags": tags or [],
+                "embedding": embedding,
+                "timestamp": datetime.now(),
+                "metadata": {}
+            }
+            
+            self.memories.insert_one(memory_doc)
             
             debug_success("Saved memory", {
                 "id": memory_id,
@@ -369,23 +300,18 @@ class ZackGPTDatabase:
     
     def get_memory(self, memory_id: str) -> Optional[Dict[str, Any]]:
         """Get a specific memory by ID."""
-        with self.get_connection() as conn:
-            row = conn.execute("""
-                SELECT id, question, answer, agent, importance, tags, timestamp, metadata
-                FROM memories WHERE id = ?
-            """, (memory_id,)).fetchone()
-            
-            if row:
-                return {
-                    "id": row["id"],
-                    "question": row["question"],
-                    "answer": row["answer"],
-                    "agent": row["agent"],
-                    "importance": row["importance"],
-                    "tags": json.loads(row["tags"]) if row["tags"] else [],
-                    "timestamp": row["timestamp"],
-                    "metadata": json.loads(row["metadata"]) if row["metadata"] else {}
-                }
+        memory = self.memories.find_one({"_id": memory_id})
+        if memory:
+            return {
+                "id": memory["_id"],
+                "question": memory["question"],
+                "answer": memory["answer"],
+                "agent": memory["agent"],
+                "importance": memory["importance"],
+                "tags": memory.get("tags", []),
+                "timestamp": memory["timestamp"],
+                "metadata": memory.get("metadata", {})
+            }
         return None
     
     def query_memories(self, query: str, limit: int = 5, agent: str = None,
@@ -403,58 +329,41 @@ class ZackGPTDatabase:
             if not query_embedding:
                 return []
             
-            # Build WHERE clause for filters
-            where_conditions = []
-            params = []
-            
+            # Build filter
+            filter_query = {}
             if agent:
-                where_conditions.append("agent = ?")
-                params.append(agent)
-            
+                filter_query["agent"] = agent
             if importance:
-                where_conditions.append("importance = ?")
-                params.append(importance)
+                filter_query["importance"] = importance
+            if tags:
+                filter_query["tags"] = {"$in": tags}
             
-            where_clause = f"WHERE {' AND '.join(where_conditions)}" if where_conditions else ""
+            # Get all matching memories
+            memories = list(self.memories.find(filter_query).sort("timestamp", DESCENDING))
             
-            with self.get_connection() as conn:
-                rows = conn.execute(f"""
-                    SELECT id, question, answer, agent, importance, tags, embedding, timestamp, metadata
-                    FROM memories 
-                    {where_clause}
-                    ORDER BY timestamp DESC
-                """, params).fetchall()
+            # Calculate similarities and filter
+            results = []
+            for memory in memories:
+                embedding = memory.get("embedding", [])
+                similarity = self._cosine_similarity(query_embedding, embedding)
                 
-                # Calculate similarities and filter
-                results = []
-                for row in rows:
-                    embedding = json.loads(row["embedding"]) if row["embedding"] else []
-                    similarity = self._cosine_similarity(query_embedding, embedding)
-                    
-                    if similarity >= similarity_threshold:
-                        memory = {
-                            "id": row["id"],
-                            "question": row["question"],
-                            "answer": row["answer"],
-                            "agent": row["agent"],
-                            "importance": row["importance"],
-                            "tags": json.loads(row["tags"]) if row["tags"] else [],
-                            "timestamp": row["timestamp"],
-                            "metadata": json.loads(row["metadata"]) if row["metadata"] else {},
-                            "similarity": similarity
-                        }
-                        
-                        # Filter by tags if specified
-                        if tags:
-                            memory_tags = memory["tags"]
-                            if not any(tag in memory_tags for tag in tags):
-                                continue
-                        
-                        results.append(memory)
-                
-                # Sort by similarity and return top results
-                results.sort(key=lambda x: x["similarity"], reverse=True)
-                return results[:limit]
+                if similarity >= similarity_threshold:
+                    memory_result = {
+                        "id": memory["_id"],
+                        "question": memory["question"],
+                        "answer": memory["answer"],
+                        "agent": memory["agent"],
+                        "importance": memory["importance"],
+                        "tags": memory.get("tags", []),
+                        "timestamp": memory["timestamp"],
+                        "metadata": memory.get("metadata", {}),
+                        "similarity": similarity
+                    }
+                    results.append(memory_result)
+            
+            # Sort by similarity and return top results
+            results.sort(key=lambda x: x["similarity"], reverse=True)
+            return results[:limit]
                 
         except Exception as e:
             debug_error("Failed to query memories", e)
@@ -463,18 +372,13 @@ class ZackGPTDatabase:
     def update_memory(self, memory_id: str, **updates) -> bool:
         """Update a memory."""
         try:
-            set_clauses = []
-            values = []
+            update_data = {}
             
             for key, value in updates.items():
                 if key in ["question", "answer", "agent", "importance", "tags", "metadata"]:
-                    set_clauses.append(f"{key} = ?")
-                    if key in ["tags", "metadata"]:
-                        values.append(json.dumps(value))
-                    else:
-                        values.append(value)
+                    update_data[key] = value
             
-            if not set_clauses:
+            if not update_data:
                 return False
             
             # If question or answer changed, regenerate embedding
@@ -485,33 +389,30 @@ class ZackGPTDatabase:
                     new_answer = updates.get("answer", memory["answer"])
                     new_embedding = self._generate_embedding(f"{new_question} {new_answer}")
                     if new_embedding:
-                        set_clauses.append("embedding = ?")
-                        values.append(json.dumps(new_embedding))
+                        update_data["embedding"] = new_embedding
             
-            values.append(memory_id)
+            result = self.memories.update_one(
+                {"_id": memory_id},
+                {"$set": update_data}
+            )
             
-            with self.get_connection() as conn:
-                cursor = conn.execute(f"""
-                    UPDATE memories SET {', '.join(set_clauses)}
-                    WHERE id = ?
-                """, values)
-                conn.commit()
-                return cursor.rowcount > 0
-                
+            if result.modified_count > 0:
+                debug_info("Updated memory", {"id": memory_id})
+                return True
+            return False
+            
         except Exception as e:
             debug_error("Failed to update memory", e)
             return False
     
     def delete_memory(self, memory_id: str) -> bool:
         """Delete a memory."""
-        with self.get_connection() as conn:
-            cursor = conn.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
-            conn.commit()
-            
-            deleted = cursor.rowcount > 0
-            if deleted:
-                debug_info("Deleted memory", {"id": memory_id})
-            return deleted
+        result = self.memories.delete_one({"_id": memory_id})
+        
+        deleted = result.deleted_count > 0
+        if deleted:
+            debug_info("Deleted memory", {"id": memory_id})
+        return deleted
     
     # =============================
     #        SETTINGS OPERATIONS
@@ -519,100 +420,103 @@ class ZackGPTDatabase:
     
     def set_setting(self, key: str, value: Any) -> None:
         """Set a user setting."""
-        with self.get_connection() as conn:
-            conn.execute("""
-                INSERT OR REPLACE INTO user_settings (key, value, updated_at)
-                VALUES (?, ?, ?)
-            """, (key, json.dumps(value), datetime.now()))
-            conn.commit()
+        self.user_settings.update_one(
+            {"key": key},
+            {
+                "$set": {
+                    "key": key,
+                    "value": value,
+                    "updated_at": datetime.now()
+                }
+            },
+            upsert=True
+        )
     
     def get_setting(self, key: str, default: Any = None) -> Any:
         """Get a user setting."""
-        with self.get_connection() as conn:
-            row = conn.execute("""
-                SELECT value FROM user_settings WHERE key = ?
-            """, (key,)).fetchone()
-            
-            if row:
-                return json.loads(row["value"])
-            return default
+        setting = self.user_settings.find_one({"key": key})
+        if setting:
+            return setting["value"]
+        return default
     
     def get_all_settings(self) -> Dict[str, Any]:
         """Get all user settings."""
-        with self.get_connection() as conn:
-            rows = conn.execute("""
-                SELECT key, value FROM user_settings
-            """).fetchall()
-            
-            return {row["key"]: json.loads(row["value"]) for row in rows}
+        settings = self.user_settings.find()
+        return {setting["key"]: setting["value"] for setting in settings}
     
     # =============================
-    #        STATISTICS
+    #        SESSION OPERATIONS
+    # =============================
+    
+    def set_session(self, session_id: str, data: Dict, expires_at: datetime = None) -> None:
+        """Set session data."""
+        if not expires_at:
+            expires_at = datetime.now() + timedelta(hours=24)
+        
+        self.sessions.update_one(
+            {"session_id": session_id},
+            {
+                "$set": {
+                    "session_id": session_id,
+                    "data": data,
+                    "expires_at": expires_at,
+                    "created_at": datetime.now()
+                }
+            },
+            upsert=True
+        )
+    
+    def get_session(self, session_id: str) -> Optional[Dict]:
+        """Get session data."""
+        session = self.sessions.find_one({
+            "session_id": session_id,
+            "expires_at": {"$gt": datetime.now()}
+        })
+        return session["data"] if session else None
+    
+    def delete_session(self, session_id: str) -> bool:
+        """Delete a session."""
+        result = self.sessions.delete_one({"session_id": session_id})
+        return result.deleted_count > 0
+    
+    # =============================
+    #        UTILITY OPERATIONS
     # =============================
     
     def get_stats(self) -> Dict[str, Any]:
         """Get database statistics."""
-        with self.get_connection() as conn:
-            stats = {}
-            
-            # Thread stats
-            thread_stats = conn.execute("""
-                SELECT COUNT(*) as total, 
-                       SUM(message_count) as total_messages,
-                       MAX(updated_at) as last_activity
-                FROM threads
-            """).fetchone()
-            
-            stats["threads"] = {
-                "total": thread_stats["total"],
-                "total_messages": thread_stats["total_messages"] or 0,
-                "last_activity": thread_stats["last_activity"]
-            }
-            
-            # Memory stats
-            memory_stats = conn.execute("""
-                SELECT COUNT(*) as total,
-                       COUNT(CASE WHEN importance = 'high' THEN 1 END) as high_importance,
-                       COUNT(CASE WHEN importance = 'medium' THEN 1 END) as medium_importance,
-                       COUNT(CASE WHEN importance = 'low' THEN 1 END) as low_importance
-                FROM memories
-            """).fetchone()
-            
-            stats["memories"] = {
-                "total": memory_stats["total"],
+        return {
+            "threads": self.threads.count_documents({}),
+            "messages": self.messages.count_documents({}),
+            "memories": self.memories.count_documents({}),
+            "settings": self.user_settings.count_documents({}),
+            "sessions": self.sessions.count_documents({}),
+            "memory_stats": {
                 "by_importance": {
-                    "high": memory_stats["high_importance"],
-                    "medium": memory_stats["medium_importance"],
-                    "low": memory_stats["low_importance"]
+                    "high": self.memories.count_documents({"importance": "high"}),
+                    "medium": self.memories.count_documents({"importance": "medium"}),
+                    "low": self.memories.count_documents({"importance": "low"})
                 }
             }
-            
-            # Database size
-            db_size = conn.execute("SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size()").fetchone()
-            stats["database"] = {
-                "size_bytes": db_size["size"],
-                "size_mb": round(db_size["size"] / (1024 * 1024), 2)
-            }
-            
-            return stats
+        }
     
     def cleanup_old_data(self, days: int = 30) -> Dict[str, int]:
         """Clean up old data (optional maintenance)."""
         cutoff_date = datetime.now() - timedelta(days=days)
         
-        with self.get_connection() as conn:
-            # Clean old sessions
-            cursor = conn.execute("""
-                DELETE FROM sessions WHERE expires_at < ? OR created_at < ?
-            """, (datetime.now(), cutoff_date))
-            sessions_deleted = cursor.rowcount
-            
-            conn.commit()
-            
-            return {
-                "sessions_deleted": sessions_deleted,
-                "cutoff_date": cutoff_date.isoformat()
-            }
+        # Clean old sessions
+        result = self.sessions.delete_many({
+            "$or": [
+                {"expires_at": {"$lt": datetime.now()}},
+                {"created_at": {"$lt": cutoff_date}}
+            ]
+        })
+        sessions_deleted = result.deleted_count
+        
+        return {
+            "sessions_deleted": sessions_deleted,
+            "cutoff_date": cutoff_date.isoformat()
+        }
 
 
 # Global database instance

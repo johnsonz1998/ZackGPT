@@ -44,8 +44,9 @@ class TestCompleteUserWorkflow:
         
         # Step 2: Send a user message
         message_data = {
-            "role": "user",
-            "content": "Hello! This is an end-to-end test message."
+            "content": "Hello! This is an end-to-end test message.",
+            "thread_id": thread_id,
+            "force_web_search": False
         }
         
         response = requests.post(
@@ -194,8 +195,9 @@ class TestPerformanceIntegration:
             
             for i in range(message_count):
                 message_data = {
-                    "role": "user" if i % 2 == 0 else "assistant",
-                    "content": f"Performance test message {i+1}. " + "Lorem ipsum " * 10
+                    "content": f"Performance test message {i+1}. " + "Lorem ipsum " * 10,
+                    "thread_id": thread_id,
+                    "force_web_search": False
                 }
                 
                 response = requests.post(

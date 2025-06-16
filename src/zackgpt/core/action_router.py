@@ -1,6 +1,6 @@
 import json
 from config import config
-# Legacy memory actions removed. If needed, reimplement using memory_db.
+# Legacy memory actions removed. If needed, reimplement using unified database.
 
 def speak_response(msg: str):
     """Speak the given message using configured voice backend."""

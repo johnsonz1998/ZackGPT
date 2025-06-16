@@ -254,6 +254,21 @@ def cleanup_test_data():
                 os.remove(db_file)
         except:
             pass
+    
+    # Cleanup the main database if it exists and has test data
+    main_db_path = "data/zackgpt.db"
+    if os.path.exists(main_db_path):
+        try:
+            import sqlite3
+            conn = sqlite3.connect(main_db_path)
+            # Delete any threads with "Test" in the title (test data)
+            conn.execute("DELETE FROM messages WHERE thread_id IN (SELECT id FROM threads WHERE title LIKE '%Test%')")
+            conn.execute("DELETE FROM threads WHERE title LIKE '%Test%'")
+            conn.execute("DELETE FROM memories WHERE question LIKE '%test%' OR answer LIKE '%test%'")
+            conn.commit()
+            conn.close()
+        except:
+            pass
 
 @pytest.fixture
 def clean_database():

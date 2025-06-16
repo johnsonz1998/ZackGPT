@@ -18,9 +18,48 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from src.zackgpt.core.memory_manager import PersistentMemoryManager
 
 @pytest.fixture
-def memory_manager():
-    """Create a test memory manager instance."""
-    return PersistentMemoryManager()
+def mock_openai():
+    """Mock OpenAI client for testing."""
+    with patch('src.zackgpt.core.database.OpenAI') as mock_openai_class:
+        # Mock the OpenAI client and embeddings
+        mock_client = Mock()
+        mock_embeddings = Mock()
+        
+        # Create a counter to generate unique embeddings
+        call_count = 0
+        def create_unique_embedding(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            # Generate very different embeddings to ensure low similarity
+            # Use different patterns for each call
+            if call_count % 2 == 1:
+                embedding = [1.0] * 768 + [0.0] * 768  # First half 1.0, second half 0.0
+            else:
+                embedding = [0.0] * 768 + [1.0] * 768  # First half 0.0, second half 1.0
+            return Mock(data=[Mock(embedding=embedding)])
+        
+        mock_embeddings.create.side_effect = create_unique_embedding
+        mock_client.embeddings = mock_embeddings
+        mock_openai_class.return_value = mock_client
+        yield mock_client
+
+@pytest.fixture
+def memory_manager(mock_openai):
+    """Create a test memory manager instance with mocked OpenAI."""
+    import uuid
+    # Mock get_database to return a fresh test database
+    with patch('src.zackgpt.core.memory_manager.get_database') as mock_get_db:
+        from src.zackgpt.core.database import ZackGPTDatabase
+        test_db_name = f"test_memory_{uuid.uuid4().hex[:8]}"
+        mongo_uri = f"mongodb://localhost:27017/{test_db_name}"
+        test_db = ZackGPTDatabase(mongo_uri)
+        mock_get_db.return_value = test_db
+        yield PersistentMemoryManager()
+        # Cleanup
+        try:
+            test_db.client.drop_database(test_db_name)
+        except:
+            pass
 
 @pytest.fixture
 def sample_memory():

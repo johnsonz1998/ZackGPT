@@ -4,11 +4,10 @@ ZackGPT Log Analyzer - Intelligent log querying and analysis
 """
 import os
 import sys
-import sqlite3
-import json
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
 import argparse
+from pymongo import MongoClient
 
 # Add parent directory to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
@@ -16,205 +15,347 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'
 class LogAnalyzer:
     """Intelligent log analysis for ZackGPT learning system."""
     
-    def __init__(self, db_path: str = "logs/zackgpt_analytics.db"):
-        self.db_path = db_path
-        if not os.path.exists(db_path):
-            print(f"❌ Log database not found: {db_path}")
-            print("💡 Make sure LOG_AGGREGATION_ENABLED=true and run some interactions first")
+    def __init__(self, mongo_uri: str = None, db_name: str = "zackgpt"):
+        self.mongo_uri = mongo_uri or os.getenv("MONGODB_URI", "mongodb://localhost:27017")
+        self.db_name = db_name
+        
+        try:
+            self.client = MongoClient(self.mongo_uri)
+            self.db = self.client[self.db_name]
+            
+            # Test connection
+            self.client.admin.command('ping')
+            
+            # Check if collections exist and have data
+            collections = ['prompt_evolution', 'system_logs', 'performance_metrics']
+            total_docs = sum(self.db[col].count_documents({}) for col in collections)
+            
+            if total_docs == 0:
+                print("❌ No analytics data found in MongoDB")
+                print("💡 Make sure LOG_AGGREGATION_ENABLED=true and run some interactions first")
+                sys.exit(1)
+                
+        except Exception as e:
+            print(f"❌ MongoDB connection failed: {e}")
+            print("💡 Make sure MongoDB is running and accessible")
             sys.exit(1)
     
     def component_performance_report(self, days: int = 7) -> Dict:
         """Analyze component performance over time."""
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
+        # Get datetime cutoff
+        cutoff = datetime.now() - timedelta(days=days)
+        
+        # Aggregation pipeline for component performance
+        pipeline = [
+            {
+                "$match": {
+                    "event_type": {"$in": ["user_rating", "performance_update"]},
+                    "created_at": {"$gte": cutoff},
+                    "component_name": {"$ne": None}
+                }
+            },
+            {
+                "$group": {
+                    "_id": {
+                        "component_name": "$component_name",
+                        "component_type": "$component_type"
+                    },
+                    "avg_weight": {"$avg": "$weight_after"},
+                    "avg_success_rate": {"$avg": "$success_rate_after"},
+                    "interactions": {"$sum": 1},
+                    "excellent_ratings": {
+                        "$sum": {"$cond": [{"$gte": ["$user_rating", 4]}, 1, 0]}
+                    },
+                    "poor_ratings": {
+                        "$sum": {"$cond": [{"$lte": ["$user_rating", 2]}, 1, 0]}
+                    },
+                    "total_ratings": {
+                        "$sum": {"$cond": [{"$ne": ["$user_rating", None]}, 1, 0]}
+                    }
+                }
+            },
+            {
+                "$project": {
+                    "component_name": "$_id.component_name",
+                    "component_type": "$_id.component_type",
+                    "avg_weight": 1,
+                    "avg_success_rate": 1,
+                    "interactions": 1,
+                    "excellent_rate": {
+                        "$cond": [
+                            {"$gt": ["$total_ratings", 0]},
+                            {"$divide": ["$excellent_ratings", "$total_ratings"]},
+                            0
+                        ]
+                    },
+                    "poor_rate": {
+                        "$cond": [
+                            {"$gt": ["$total_ratings", 0]},
+                            {"$divide": ["$poor_ratings", "$total_ratings"]},
+                            0
+                        ]
+                    }
+                }
+            },
+            {"$sort": {"avg_weight": -1, "interactions": -1}}
+        ]
+        
+        results = list(self.db.prompt_evolution.aggregate(pipeline))
+        
+        print(f"\n📊 Component Performance Report (Last {days} days)")
+        print("=" * 80)
+        print(f"{'Component':<30} {'Type':<15} {'Weight':<8} {'Success':<8} {'Uses':<6} {'⭐4-5':<6} {'👎1-2':<6}")
+        print("-" * 80)
+        
+        for row in results:
+            name = row['component_name'][:29] if row['component_name'] else 'N/A'
+            comp_type = row['component_type'] or 'N/A'
+            weight = row.get('avg_weight', 0) or 0
+            success = row.get('avg_success_rate', 0) or 0
+            interactions = row.get('interactions', 0)
+            excellent = row.get('excellent_rate', 0)
+            poor = row.get('poor_rate', 0)
             
-            # Get component performance data
-            query = """
-                SELECT component_name, component_type, 
-                       AVG(weight_after) as avg_weight,
-                       AVG(success_rate_after) as avg_success_rate,
-                       COUNT(*) as interactions,
-                       AVG(CASE WHEN user_rating >= 4 THEN 1.0 ELSE 0.0 END) as excellent_rate,
-                       AVG(CASE WHEN user_rating <= 2 THEN 1.0 ELSE 0.0 END) as poor_rate
-                FROM learning_events 
-                WHERE event_type IN ('user_rating', 'performance_update')
-                  AND timestamp >= datetime('now', '-{} days')
-                  AND component_name IS NOT NULL
-                GROUP BY component_name, component_type
-                ORDER BY avg_weight DESC, interactions DESC
-            """.format(days)
-            
-            results = conn.execute(query).fetchall()
-            
-            print(f"\n📊 Component Performance Report (Last {days} days)")
-            print("=" * 80)
-            print(f"{'Component':<30} {'Type':<15} {'Weight':<8} {'Success':<8} {'Uses':<6} {'⭐4-5':<6} {'👎1-2':<6}")
-            print("-" * 80)
-            
-            for row in results:
-                print(f"{row['component_name'][:29]:<30} "
-                      f"{row['component_type']:<15} "
-                      f"{row['avg_weight']:.3f}    "
-                      f"{row['avg_success_rate']:.3f}    "
-                      f"{row['interactions']:<6} "
-                      f"{row['excellent_rate']:.1%}  "
-                      f"{row['poor_rate']:.1%}")
-            
-            return [dict(row) for row in results]
+            print(f"{name:<30} "
+                  f"{comp_type:<15} "
+                  f"{weight:.3f}    "
+                  f"{success:.3f}    "
+                  f"{interactions:<6} "
+                  f"{excellent:.1%}  "
+                  f"{poor:.1%}")
+        
+        return results
     
     def user_rating_analysis(self, days: int = 7) -> Dict:
         """Analyze user rating patterns."""
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            
-            # Rating distribution
-            rating_dist = conn.execute("""
-                SELECT user_rating, COUNT(*) as count,
-                       COUNT(*) * 100.0 / (SELECT COUNT(*) FROM learning_events 
-                                          WHERE user_rating IS NOT NULL 
-                                            AND timestamp >= datetime('now', '-{} days')) as percentage
-                FROM learning_events 
-                WHERE user_rating IS NOT NULL 
-                  AND timestamp >= datetime('now', '-{} days')
-                GROUP BY user_rating 
-                ORDER BY user_rating DESC
-            """.format(days, days)).fetchall()
-            
-            # Rating trends over time
-            trends = conn.execute("""
-                SELECT DATE(timestamp) as date,
-                       AVG(user_rating) as avg_rating,
-                       COUNT(*) as total_ratings
-                FROM learning_events 
-                WHERE user_rating IS NOT NULL 
-                  AND timestamp >= datetime('now', '-{} days')
-                GROUP BY DATE(timestamp)
-                ORDER BY date DESC
-                LIMIT 10
-            """.format(days)).fetchall()
-            
-            print(f"\n⭐ User Rating Analysis (Last {days} days)")
-            print("=" * 50)
-            print("Rating Distribution:")
-            for row in rating_dist:
-                stars = "⭐" * row['user_rating'] if row['user_rating'] > 0 else "⏭️"
-                print(f"  {stars} {row['user_rating']}/5: {row['count']:>3} ratings ({row['percentage']:.1f}%)")
-            
-            print("\nDaily Trends:")
-            for row in trends:
-                print(f"  {row['date']}: {row['avg_rating']:.2f}/5 avg ({row['total_ratings']} ratings)")
-            
-            return {
-                'distribution': [dict(row) for row in rating_dist],
-                'trends': [dict(row) for row in trends]
-            }
+        cutoff = datetime.now() - timedelta(days=days)
+        
+        # Rating distribution
+        rating_pipeline = [
+            {
+                "$match": {
+                    "user_rating": {"$ne": None},
+                    "created_at": {"$gte": cutoff}
+                }
+            },
+            {
+                "$group": {
+                    "_id": "$user_rating",
+                    "count": {"$sum": 1}
+                }
+            },
+            {"$sort": {"_id": -1}}
+        ]
+        
+        rating_dist = list(self.db.prompt_evolution.aggregate(rating_pipeline))
+        total_ratings = sum(r['count'] for r in rating_dist)
+        
+        # Daily trends
+        trends_pipeline = [
+            {
+                "$match": {
+                    "user_rating": {"$ne": None},
+                    "created_at": {"$gte": cutoff}
+                }
+            },
+            {
+                "$group": {
+                    "_id": {
+                        "$dateToString": {
+                            "format": "%Y-%m-%d",
+                            "date": "$created_at"
+                        }
+                    },
+                    "avg_rating": {"$avg": "$user_rating"},
+                    "total_ratings": {"$sum": 1}
+                }
+            },
+            {"$sort": {"_id": -1}},
+            {"$limit": 10}
+        ]
+        
+        trends = list(self.db.prompt_evolution.aggregate(trends_pipeline))
+        
+        print(f"\n⭐ User Rating Analysis (Last {days} days)")
+        print("=" * 50)
+        print("Rating Distribution:")
+        for row in rating_dist:
+            rating = row['_id']
+            count = row['count']
+            percentage = (count / total_ratings * 100) if total_ratings > 0 else 0
+            stars = "⭐" * rating if rating > 0 else "⏭️"
+            print(f"  {stars} {rating}/5: {count:>3} ratings ({percentage:.1f}%)")
+        
+        print("\nDaily Trends:")
+        for row in trends:
+            date = row['_id']
+            avg_rating = row['avg_rating']
+            total = row['total_ratings']
+            print(f"  {date}: {avg_rating:.2f}/5 avg ({total} ratings)")
+        
+        return {
+            'distribution': rating_dist,
+            'trends': trends
+        }
     
     def learning_efficiency_report(self, days: int = 7) -> Dict:
         """Analyze how efficiently the system is learning."""
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
+        cutoff = datetime.now() - timedelta(days=days)
+        
+        # Learning velocity pipeline
+        velocity_pipeline = [
+            {
+                "$match": {
+                    "event_type": "performance_update",
+                    "created_at": {"$gte": cutoff},
+                    "weight_before": {"$ne": None},
+                    "weight_after": {"$ne": None}
+                }
+            },
+            {
+                "$group": {
+                    "_id": "$component_name",
+                    "max_weight": {"$max": "$weight_after"},
+                    "min_weight": {"$min": "$weight_before"},
+                    "updates": {"$sum": 1}
+                }
+            },
+            {
+                "$match": {"updates": {"$gt": 3}}
+            },
+            {
+                "$project": {
+                    "component_name": "$_id",
+                    "weight_delta": {"$subtract": ["$max_weight", "$min_weight"]},
+                    "updates": 1,
+                    "learning_rate": {
+                        "$divide": [
+                            {"$subtract": ["$max_weight", "$min_weight"]},
+                            "$updates"
+                        ]
+                    }
+                }
+            },
+            {
+                "$sort": {
+                    "weight_delta": -1
+                }
+            }
+        ]
+        
+        velocity = list(self.db.prompt_evolution.aggregate(velocity_pipeline))
+        
+        print(f"\n🚀 Learning Efficiency Report (Last {days} days)")
+        print("=" * 70)
+        print(f"{'Component':<30} {'Weight Δ':<10} {'Updates':<8} {'Learn Rate':<12}")
+        print("-" * 70)
+        
+        for row in velocity:
+            name = row['component_name'][:29] if row['component_name'] else 'N/A'
+            weight_delta = row.get('weight_delta', 0)
+            updates = row.get('updates', 0)
+            learning_rate = row.get('learning_rate', 0)
             
-            # Learning velocity (weight changes over time)
-            velocity = conn.execute("""
-                SELECT component_name,
-                       MAX(weight_after) - MIN(weight_before) as weight_delta,
-                       COUNT(*) as updates,
-                       (MAX(weight_after) - MIN(weight_before)) / COUNT(*) as learning_rate
-                FROM learning_events 
-                WHERE event_type = 'performance_update'
-                  AND timestamp >= datetime('now', '-{} days')
-                  AND weight_before IS NOT NULL AND weight_after IS NOT NULL
-                GROUP BY component_name
-                HAVING COUNT(*) > 3
-                ORDER BY ABS(weight_delta) DESC
-            """.format(days)).fetchall()
-            
-            print(f"\n🚀 Learning Efficiency Report (Last {days} days)")
-            print("=" * 70)
-            print(f"{'Component':<30} {'Weight Δ':<10} {'Updates':<8} {'Learn Rate':<12}")
-            print("-" * 70)
-            
-            for row in velocity:
-                direction = "📈" if row['weight_delta'] > 0 else "📉" if row['weight_delta'] < 0 else "➡️"
-                print(f"{row['component_name'][:29]:<30} "
-                      f"{direction} {row['weight_delta']:>6.3f}  "
-                      f"{row['updates']:<8} "
-                      f"{row['learning_rate']:>8.4f}")
-            
-            return [dict(row) for row in velocity]
+            direction = "📈" if weight_delta > 0 else "📉" if weight_delta < 0 else "➡️"
+            print(f"{name:<30} "
+                  f"{direction} {weight_delta:>6.3f}  "
+                  f"{updates:<8} "
+                  f"{learning_rate:>8.4f}")
+        
+        return velocity
     
     def query_logs(self, event_type: str = None, component: str = None, days: int = 1) -> List[Dict]:
         """General log querying."""
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            
-            conditions = [f"timestamp >= datetime('now', '-{days} days')"]
-            params = []
-            
-            if event_type:
-                conditions.append("event_type = ?")
-                params.append(event_type)
-            
-            if component:
-                conditions.append("component_name LIKE ?")
-                params.append(f"%{component}%")
-            
-            query = f"""
-                SELECT * FROM learning_events 
-                WHERE {' AND '.join(conditions)}
-                ORDER BY timestamp DESC
-                LIMIT 50
-            """
-            
-            results = conn.execute(query, params).fetchall()
-            return [dict(row) for row in results]
+        cutoff = datetime.now() - timedelta(days=days)
+        
+        match_conditions = {"created_at": {"$gte": cutoff}}
+        
+        if event_type:
+            match_conditions["event_type"] = event_type
+        
+        if component:
+            match_conditions["component_name"] = {"$regex": component, "$options": "i"}
+        
+        results = list(
+            self.db.prompt_evolution.find(match_conditions)
+            .sort("created_at", -1)
+            .limit(50)
+        )
+        
+        # Convert ObjectId to string for JSON serialization
+        for result in results:
+            result['_id'] = str(result['_id'])
+        
+        return results
     
     def system_health(self) -> Dict:
         """Overall system health metrics."""
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
+        cutoff = datetime.now() - timedelta(days=7)
+        
+        # Basic stats
+        stats_pipeline = [
+            {
+                "$match": {"created_at": {"$gte": cutoff}}
+            },
+            {
+                "$group": {
+                    "_id": None,
+                    "total_events": {"$sum": 1},
+                    "avg_user_rating": {"$avg": "$user_rating"},
+                    "total_ratings": {
+                        "$sum": {"$cond": [{"$ne": ["$user_rating", None]}, 1, 0]}
+                    },
+                    "total_selections": {
+                        "$sum": {"$cond": [{"$eq": ["$event_type", "component_selected"]}, 1, 0]}
+                    },
+                    "unique_components": {"$addToSet": "$component_name"}
+                }
+            },
+            {
+                "$project": {
+                    "total_events": 1,
+                    "avg_user_rating": 1,
+                    "total_ratings": 1,
+                    "total_selections": 1,
+                    "unique_components": {"$size": "$unique_components"}
+                }
+            }
+        ]
+        
+        stats_result = list(self.db.prompt_evolution.aggregate(stats_pipeline))
+        stats = stats_result[0] if stats_result else {}
+        
+        # Error count
+        error_count = self.db.system_logs.count_documents({
+            "level": "ERROR",
+            "created_at": {"$gte": cutoff}
+        })
+        
+        print("\n🏥 System Health Dashboard")
+        print("=" * 40)
+        print(f"📊 Total Learning Events: {stats.get('total_events', 0):,}")
+        print(f"🧩 Active Components: {stats.get('unique_components', 0)}")
+        
+        avg_rating = stats.get('avg_user_rating')
+        if avg_rating:
+            print(f"⭐ Average User Rating: {avg_rating:.2f}/5")
+        else:
+            print("⭐ No ratings yet")
             
-            # Basic stats
-            stats = conn.execute("""
-                SELECT 
-                    COUNT(*) as total_events,
-                    COUNT(DISTINCT component_name) as unique_components,
-                    AVG(CASE WHEN user_rating IS NOT NULL THEN user_rating END) as avg_user_rating,
-                    COUNT(CASE WHEN user_rating IS NOT NULL THEN 1 END) as total_ratings,
-                    COUNT(CASE WHEN event_type = 'component_selected' THEN 1 END) as total_selections
-                FROM learning_events 
-                WHERE timestamp >= datetime('now', '-7 days')
-            """).fetchone()
-            
-            # Error rate
-            errors = conn.execute("""
-                SELECT COUNT(*) as error_count
-                FROM system_events 
-                WHERE level = 'ERROR' 
-                  AND timestamp >= datetime('now', '-7 days')
-            """).fetchone()
-            
-            print("\n🏥 System Health Dashboard")
-            print("=" * 40)
-            print(f"📊 Total Learning Events: {stats['total_events']:,}")
-            print(f"🧩 Active Components: {stats['unique_components']}")
-            print(f"⭐ Average User Rating: {stats['avg_user_rating']:.2f}/5" if stats['avg_user_rating'] else "⭐ No ratings yet")
-            print(f"🎯 Total User Ratings: {stats['total_ratings']:,}")
-            print(f"🎲 Component Selections: {stats['total_selections']:,}")
-            print(f"❌ Errors (7 days): {errors['error_count']}")
-            
-            health_score = 100
-            if stats['avg_user_rating'] and stats['avg_user_rating'] < 3.0:
-                health_score -= 30
-            if errors['error_count'] > 10:
-                health_score -= 20
-            if stats['total_ratings'] < 10:
-                health_score -= 10
-            
-            status = "🟢 Excellent" if health_score >= 90 else "🟡 Good" if health_score >= 70 else "🔴 Needs Attention"
-            print(f"💪 Health Score: {health_score}/100 ({status})")
-            
-            return dict(stats)
+        print(f"🎯 Total User Ratings: {stats.get('total_ratings', 0):,}")
+        print(f"🎲 Component Selections: {stats.get('total_selections', 0):,}")
+        print(f"❌ Errors (7 days): {error_count}")
+        
+        health_score = 100
+        if avg_rating and avg_rating < 3.0:
+            health_score -= 30
+        if error_count > 10:
+            health_score -= 20
+        
+        status = "🟢 Excellent" if health_score >= 80 else "🟡 Good" if health_score >= 60 else "🔴 Needs Attention"
+        print(f"\n🏥 Health Score: {health_score}/100 {status}")
+        
+        return stats
 
 def main():
     parser = argparse.ArgumentParser(description="ZackGPT Log Analyzer")
@@ -241,8 +382,11 @@ def main():
         print(f"\n🔍 Query Results ({len(results)} events)")
         print("=" * 50)
         for event in results[:10]:  # Show first 10
-            print(f"{event['timestamp']} - {event['event_type']} - {event['component_name']}")
-            if event['user_rating']:
+            timestamp = event.get('timestamp', event.get('created_at', 'N/A'))
+            event_type = event.get('event_type', 'N/A')
+            component = event.get('component_name', 'N/A')
+            print(f"{timestamp} - {event_type} - {component}")
+            if event.get('user_rating'):
                 print(f"  ⭐ Rating: {event['user_rating']}/5")
 
 if __name__ == "__main__":

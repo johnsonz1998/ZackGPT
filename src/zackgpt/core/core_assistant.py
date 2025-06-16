@@ -4,7 +4,7 @@ import uuid
 from pathlib import Path
 from typing import Dict
 from openai import OpenAI
-from .memory_db import MemoryDatabase
+from .database import get_database
 from .logger import debug_log, debug_info, debug_error, debug_success
 from config import config
 from .prompt_utils import load_prompt
@@ -80,10 +80,9 @@ class CoreAssistant:
         
     @property
     def memory_db(self):
-        """Lazy load memory database."""
+        """Lazy load unified database."""
         if self._memory_db is None:
-            from .memory_manager import PersistentMemoryManager
-            self._memory_db = PersistentMemoryManager()
+            self._memory_db = get_database()
         return self._memory_db
         
     @property
@@ -100,6 +99,7 @@ class CoreAssistant:
             memories = self.memory_db.query_memories(
                 query=user_input,
                 limit=3,  # Reduced from 5 to save tokens
+                agent=agent,
                 importance="high"  # Only get high-importance memories
             )
             

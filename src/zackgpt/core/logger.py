@@ -4,12 +4,13 @@ from pathlib import Path
 from typing import Any, Optional, Dict, Union
 from datetime import datetime
 import json
-import sqlite3
 import threading
 import time
 import traceback
 from functools import wraps
 import re
+from pymongo import MongoClient
+from pymongo.collection import Collection
 
 # Create logs dir if not exists
 log_dir = Path("logs")
@@ -45,11 +46,11 @@ log_warn = logger.warning
 log_error = logger.error
 
 # Get DEBUG_MODE from environment
-DEBUG_MODE = os.getenv("DEBUG_MODE", "False").lower() == "true"
+DEBUG_MODE = os.getenv("DEBUG_MODE", "false").lower() == "true"
 
-# Log aggregation settings
-LOG_AGGREGATION_ENABLED = os.getenv("LOG_AGGREGATION_ENABLED", "true").lower() == "true"
-LOG_DB_PATH = os.getenv("LOG_DB_PATH", "logs/zackgpt_analytics.db")
+# Analytics settings - separate from main MongoDB
+LOG_AGGREGATION_ENABLED = os.getenv("LOG_AGGREGATION_ENABLED", "false").lower() == "true"
+ANALYTICS_DB_PATH = os.getenv("ANALYTICS_DB_PATH", "logs/analytics.db")
 
 class LogError(Exception):
     """Custom exception for logging errors"""
@@ -110,149 +111,119 @@ def log_performance(operation: str):
         return wrapper
     return decorator
 
-class LogAggregator:
-    """Structured log aggregation for intelligent analysis."""
+class AnalyticsDatabase:
+    """MongoDB-based analytics for large-scale operational data."""
     
-    def __init__(self, db_path: str = LOG_DB_PATH):
-        self.db_path = db_path
+    def __init__(self, mongo_uri: str = None, db_name: str = "zackgpt"):
+        self.mongo_uri = mongo_uri or os.getenv("MONGODB_URI", "mongodb://localhost:27017")
+        self.db_name = db_name
+        self.client = None
+        self.db = None
+        self.collections = {}
         self.db_lock = threading.Lock()
         self._init_database()
     
     def _init_database(self):
-        """Initialize SQLite database for log storage."""
-        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
-        
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS learning_events (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    timestamp TEXT NOT NULL,
-                    event_type TEXT NOT NULL,
-                    component_name TEXT,
-                    component_type TEXT,
-                    user_rating INTEGER,
-                    weight_before REAL,
-                    weight_after REAL,
-                    success_rate_before REAL,
-                    success_rate_after REAL,
-                    selection_probability REAL,
-                    strategy TEXT,
-                    context_type TEXT,
-                    raw_data TEXT,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
+        """Initialize MongoDB connection and collections for analytics storage."""
+        try:
+            self.client = MongoClient(self.mongo_uri)
+            self.db = self.client[self.db_name]
             
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS system_events (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    timestamp TEXT NOT NULL,
-                    event_type TEXT NOT NULL,
-                    level TEXT NOT NULL,
-                    message TEXT,
-                    data TEXT,
-                    stack_trace TEXT,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
+            # Initialize collections
+            self.collections = {
+                'prompt_evolution': self.db.prompt_evolution,
+                'system_logs': self.db.system_logs,
+                'performance_metrics': self.db.performance_metrics
+            }
             
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS performance_metrics (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    timestamp TEXT NOT NULL,
-                    operation TEXT NOT NULL,
-                    duration REAL NOT NULL,
-                    success BOOLEAN,
-                    error_message TEXT,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
+            # Create indexes for efficient analytical queries
+            self.collections['prompt_evolution'].create_index([("timestamp", 1)])
+            self.collections['prompt_evolution'].create_index([("component_name", 1)])
+            self.collections['prompt_evolution'].create_index([("user_rating", 1)])
+            self.collections['system_logs'].create_index([("level", 1)])
+            self.collections['system_logs'].create_index([("timestamp", 1)])
+            self.collections['performance_metrics'].create_index([("operation", 1)])
+            self.collections['performance_metrics'].create_index([("timestamp", 1)])
             
-            # Indexes for fast querying
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_learning_timestamp ON learning_events(timestamp)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_learning_component ON learning_events(component_name)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_learning_rating ON learning_events(user_rating)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_system_level ON system_events(level)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_performance_operation ON performance_metrics(operation)")
+        except Exception as e:
+            print(f"❌ Analytics database initialization error: {e}")
+            self.client = None
+            self.db = None
     
-    def log_learning_event(self, event_type: str, component_name: str = None, **kwargs):
-        """Log a learning-related event for analysis."""
-        if not LOG_AGGREGATION_ENABLED:
+    def log_prompt_evolution(self, event_type: str, component_name: str = None, **kwargs):
+        """Log prompt evolution events for analytical purposes."""
+        if not LOG_AGGREGATION_ENABLED or not self.db:
             return
             
         with self.db_lock:
             try:
-                with sqlite3.connect(self.db_path) as conn:
-                    conn.execute("""
-                        INSERT INTO learning_events (
-                            timestamp, event_type, component_name, component_type,
-                            user_rating, weight_before, weight_after, 
-                            success_rate_before, success_rate_after,
-                            selection_probability, strategy, context_type, raw_data
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        datetime.now().isoformat(),
-                        event_type,
-                        component_name,
-                        kwargs.get('component_type'),
-                        kwargs.get('user_rating'),
-                        kwargs.get('weight_before'),
-                        kwargs.get('weight_after'),
-                        kwargs.get('success_rate_before'),
-                        kwargs.get('success_rate_after'),
-                        kwargs.get('selection_probability'),
-                        kwargs.get('strategy'),
-                        kwargs.get('context_type'),
-                        json.dumps(kwargs)
-                    ))
+                doc = {
+                    'timestamp': datetime.now().isoformat(),
+                    'event_type': event_type,
+                    'component_name': component_name,
+                    'component_type': kwargs.get('component_type'),
+                    'user_rating': kwargs.get('user_rating'),
+                    'weight_before': kwargs.get('weight_before'),
+                    'weight_after': kwargs.get('weight_after'),
+                    'success_rate_before': kwargs.get('success_rate_before'),
+                    'success_rate_after': kwargs.get('success_rate_after'),
+                    'selection_probability': kwargs.get('selection_probability'),
+                    'strategy': kwargs.get('strategy'),
+                    'context_type': kwargs.get('context_type'),
+                    'raw_data': kwargs,
+                    'created_at': datetime.now()
+                }
+                
+                self.collections['prompt_evolution'].insert_one(doc)
+                
             except Exception as e:
-                print(f"❌ Log aggregation error: {e}")
+                print(f"❌ Analytics error: {e}")
     
     def log_system_event(self, level: str, event_type: str, message: str, data: Dict = None, error: Exception = None):
-        """Log a system event with optional error details."""
-        if not LOG_AGGREGATION_ENABLED:
+        """Log system events for operational analysis."""
+        if not LOG_AGGREGATION_ENABLED or not self.db:
             return
             
         with self.db_lock:
             try:
-                with sqlite3.connect(self.db_path) as conn:
-                    conn.execute("""
-                        INSERT INTO system_events (timestamp, event_type, level, message, data, stack_trace)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    """, (
-                        datetime.now().isoformat(),
-                        event_type,
-                        level,
-                        message,
-                        json.dumps(data) if data else None,
-                        traceback.format_exc() if error else None
-                    ))
+                doc = {
+                    'timestamp': datetime.now().isoformat(),
+                    'event_type': event_type,
+                    'level': level,
+                    'message': message,
+                    'data': data,
+                    'stack_trace': traceback.format_exc() if error else None,
+                    'created_at': datetime.now()
+                }
+                
+                self.collections['system_logs'].insert_one(doc)
+                
             except Exception as e:
-                print(f"❌ Log aggregation error: {e}")
+                print(f"❌ Analytics error: {e}")
     
     def log_performance(self, operation: str, duration: float, success: bool = True, error_message: str = None):
-        """Log performance metrics."""
-        if not LOG_AGGREGATION_ENABLED:
+        """Log performance metrics for analysis."""
+        if not LOG_AGGREGATION_ENABLED or not self.db:
             return
             
         with self.db_lock:
             try:
-                with sqlite3.connect(self.db_path) as conn:
-                    conn.execute("""
-                        INSERT INTO performance_metrics (timestamp, operation, duration, success, error_message)
-                        VALUES (?, ?, ?, ?, ?)
-                    """, (
-                        datetime.now().isoformat(),
-                        operation,
-                        duration,
-                        success,
-                        error_message
-                    ))
+                doc = {
+                    'timestamp': datetime.now().isoformat(),
+                    'operation': operation,
+                    'duration': duration,
+                    'success': success,
+                    'error_message': error_message,
+                    'created_at': datetime.now()
+                }
+                
+                self.collections['performance_metrics'].insert_one(doc)
+                
             except Exception as e:
-                print(f"❌ Log aggregation error: {e}")
+                print(f"❌ Analytics error: {e}")
 
-# Global log aggregator instance
-_log_aggregator = LogAggregator() if LOG_AGGREGATION_ENABLED else None
+# Global analytics database instance
+_analytics_db = AnalyticsDatabase() if LOG_AGGREGATION_ENABLED else None
 
 def _sanitize_sensitive_data(data: Any) -> Any:
     """Sanitize sensitive data before logging."""
@@ -290,9 +261,12 @@ def debug_log(message: str, data: Optional[Any] = None, prefix: str = "🔍") ->
             output += f"\n{sanitized_data}"
     print(output)
     
+    # Also log to file using the logger
+    logger.debug(output)
+    
     # Aggregate for analysis
-    if _log_aggregator:
-        _log_aggregator.log_system_event("DEBUG", "debug_log", message, data)
+    if _analytics_db:
+        _analytics_db.log_system_event("DEBUG", "debug_log", message, data)
 
 def debug_error(message: str, error: Optional[Exception] = None) -> None:
     """Log error messages with optional exception details."""
@@ -306,8 +280,8 @@ def debug_error(message: str, error: Optional[Exception] = None) -> None:
     print(output)
     
     error_data = {"error": str(error)} if error else None
-    if _log_aggregator:
-        _log_aggregator.log_system_event("ERROR", "error", message, error_data, error)
+    if _analytics_db:
+        _analytics_db.log_system_event("ERROR", "error", message, error_data, error)
 
 def debug_success(message: str, data: Optional[Any] = None) -> None:
     """Log success messages with optional data."""
@@ -315,8 +289,8 @@ def debug_success(message: str, data: Optional[Any] = None) -> None:
         return
     debug_log(message, data, prefix="✅")
     
-    if _log_aggregator:
-        _log_aggregator.log_system_event("SUCCESS", "success", message, data)
+    if _analytics_db:
+        _analytics_db.log_system_event("SUCCESS", "success", message, data)
 
 def debug_warning(message: str, data: Optional[Any] = None) -> None:
     """Log warning messages with optional data."""
@@ -324,8 +298,8 @@ def debug_warning(message: str, data: Optional[Any] = None) -> None:
         return
     debug_log(message, data, prefix="⚠️")
     
-    if _log_aggregator:
-        _log_aggregator.log_system_event("WARNING", "warning", message, data)
+    if _analytics_db:
+        _analytics_db.log_system_event("WARNING", "warning", message, data)
 
 def debug_info(message: str, data: Optional[Any] = None) -> None:
     """Log info messages with optional data."""
@@ -333,13 +307,13 @@ def debug_info(message: str, data: Optional[Any] = None) -> None:
         return
     debug_log(message, data, prefix="ℹ️")
     
-    if _log_aggregator:
-        _log_aggregator.log_system_event("INFO", "info", message, data)
+    if _analytics_db:
+        _analytics_db.log_system_event("INFO", "info", message, data)
 
 def log_learning_event(event_type: str, component_name: str = None, **kwargs):
-    """Log learning events for analytics and debugging."""
-    if _log_aggregator:
-        _log_aggregator.log_learning_event(event_type, component_name, **kwargs)
+    """Log prompt evolution events for analytics."""
+    if _analytics_db:
+        _analytics_db.log_prompt_evolution(event_type, component_name, **kwargs)
 
 def log_component_selection(component_name: str, component_type: str, selection_probability: float, **kwargs):
     """Log component selection for analysis."""
@@ -378,8 +352,8 @@ def log_component_performance_update(component_name: str, success: bool, weight_
 
 def log_performance_metric(operation: str, duration: float, success: bool = True, error_message: str = None):
     """Log performance metrics for analysis."""
-    if _log_aggregator:
-        _log_aggregator.log_performance(operation, duration, success, error_message)
+    if _analytics_db:
+        _analytics_db.log_performance(operation, duration, success, error_message)
 
 def log_performance_metrics(operation: str, duration: float, details: Optional[Dict] = None) -> None:
     """Log performance metrics for an operation"""
@@ -424,3 +398,9 @@ def performance_logger(func):
             debug_error(f"Performance logging failed for {func.__name__}", e)
             raise
     return wrapper
+
+# Legacy support function for log_system_event
+def log_system_event(event_type: str, message: str, data: Dict = None):
+    """Legacy wrapper for system event logging."""
+    if _analytics_db:
+        _analytics_db.log_system_event("INFO", event_type, message, data)

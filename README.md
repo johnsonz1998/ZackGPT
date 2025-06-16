@@ -52,7 +52,7 @@ ZackGPT/
 ├── app/                    # Core AI application
 │   ├── core_assistant.py   # Main AI logic
 │   ├── prompt_builder.py   # Prompt evolution system
-│   ├── memory_db.py        # MongoDB integration
+│   ├── database.py         # Unified MongoDB database
 │   └── web_api.py          # FastAPI server
 ├── frontend/               # React web interface
 │   ├── src/components/     # UI components
