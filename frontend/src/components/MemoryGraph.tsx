@@ -47,16 +47,48 @@ const MemoryGraph: React.FC<MemoryGraphProps> = ({
   const svgRef = useRef<SVGSVGElement>(null);
   const [, setSelectedMemory] = useState<Memory | null>(null);
   const [hoveredMemory, setHoveredMemory] = useState<Memory | null>(null);
+  const [hiddenTags, setHiddenTags] = useState<Set<string>>(new Set());
+
 
   // Color scheme for different tags
-  const tagColors: { [key: string]: string } = useMemo(() => ({
-    identity: '#10a37f',
-    family: '#ff6b6b',
-    work: '#4ecdc4',
-    preferences: '#45b7d1',
-    memory: '#96ceb4',
-    default: '#8e8ea0'
-  }), []);
+  const tagColors: { [key: string]: string } = useMemo(() => {
+    const baseColors: { [key: string]: string } = {
+      identity: '#10a37f',
+      family: '#ff6b6b',
+      work: '#4ecdc4',
+      preferences: '#45b7d1',
+      memory: '#96ceb4',
+      default: '#8e8ea0'
+    };
+
+    // Get all unique PRIMARY tags from memories (only tags that determine node colors)
+    const allTags = new Set<string>();
+    memories.forEach(memory => {
+      const primaryTag = memory.tags[0] || 'default';
+      allTags.add(primaryTag);
+    });
+
+    // Additional colors for dynamic tags (in a consistent order)
+    const dynamicColors = [
+      '#f39c12', '#e74c3c', '#9b59b6', '#3498db', '#2ecc71', 
+      '#f1c40f', '#e67e22', '#1abc9c', '#34495e', '#95a5a6'
+    ];
+
+    const finalColors: { [key: string]: string } = { ...baseColors };
+    
+    // Sort tags alphabetically to ensure consistent color assignment
+    const sortedTags = Array.from(allTags).sort();
+    let colorIndex = 0;
+    
+    sortedTags.forEach(tag => {
+      if (!finalColors[tag]) {
+        finalColors[tag] = dynamicColors[colorIndex % dynamicColors.length];
+        colorIndex++;
+      }
+    });
+
+    return finalColors;
+  }, [memories]);
 
   // Calculate similarity between two memories (simplified)
   const calculateSimilarity = useCallback((mem1: Memory, mem2: Memory): number => {
@@ -77,12 +109,130 @@ const MemoryGraph: React.FC<MemoryGraphProps> = ({
     return tagSimilarity + textSimilarity;
   }, []);
 
-  useEffect(() => {
-    console.log('MemoryGraph received memories:', memories);
-    console.log('Memory count:', memories.length);
+  // Smart search function - supports multiple search terms and fuzzy matching
+  const matchesSearch = useCallback((memory: Memory, query: string): boolean => {
+    if (!query.trim()) return true;
     
-    if (!svgRef.current || memories.length === 0) {
-      console.log('Early return: svgRef.current =', svgRef.current, 'memories.length =', memories.length);
+    const searchTerms = query.toLowerCase().split(' ').filter(term => term.length > 0);
+    const searchableText = [
+      memory.question.toLowerCase(),
+      memory.answer.toLowerCase(), 
+      ...memory.tags.map(tag => tag.toLowerCase()),
+      memory.importance.toLowerCase()
+    ].join(' ');
+    
+    // Support for exact phrases (quoted search)
+    if (query.includes('"')) {
+      const exactPhrase = query.match(/"([^"]+)"/)?.[1];
+      if (exactPhrase) {
+        return searchableText.includes(exactPhrase.toLowerCase());
+      }
+    }
+    
+    // All search terms must be found (AND logic)
+    return searchTerms.every(term => searchableText.includes(term));
+  }, []);
+
+  // Filter memories based on search query AND hidden PRIMARY tags
+  const filteredMemories = useMemo(() => {
+    let filtered = memories;
+    
+    // First filter by hidden PRIMARY tags
+    if (hiddenTags.size > 0) {
+      filtered = filtered.filter(memory => {
+        const primaryTag = memory.tags[0] || 'default';
+        return !hiddenTags.has(primaryTag);
+      });
+    }
+    
+    // Then filter by search query
+    if (searchQuery.trim()) {
+      filtered = filtered.filter(memory => matchesSearch(memory, searchQuery));
+    }
+    
+    console.log(`Filtered memories: ${filtered.length} of ${memories.length} (hidden primary tags: ${hiddenTags.size}, search: "${searchQuery}")`);
+    return filtered;
+  }, [memories, searchQuery, matchesSearch, hiddenTags]);
+
+  // Get unique PRIMARY tags from all memories and their counts
+  const tagStatus = useMemo(() => {
+    const allTags = new Set<string>();
+    memories.forEach(memory => {
+      const primaryTag = memory.tags[0] || 'default';
+      allTags.add(primaryTag);
+    });
+
+    // Check which tags have matching memories (based on PRIMARY tag only)
+    const tagCounts: { [key: string]: { total: number; visible: number; isHidden: boolean } } = {};
+    
+    Array.from(allTags).forEach(tag => {
+      // Count memories where this tag is the PRIMARY tag
+      const totalWithTag = memories.filter(memory => {
+        const primaryTag = memory.tags[0] || 'default';
+        return primaryTag === tag;
+      }).length;
+      
+      const visibleWithTag = filteredMemories.filter(memory => {
+        const primaryTag = memory.tags[0] || 'default';
+        return primaryTag === tag;
+      }).length;
+      
+      tagCounts[tag] = {
+        total: totalWithTag,
+        visible: visibleWithTag,
+        isHidden: hiddenTags.has(tag)
+      };
+    });
+
+    return tagCounts;
+  }, [memories, filteredMemories, hiddenTags]);
+
+  // Toggle tag visibility
+  const toggleTag = useCallback((tag: string) => {
+    console.log('Toggling tag:', tag);
+    setHiddenTags(prev => {
+      const newHidden = new Set(prev);
+      if (newHidden.has(tag)) {
+        newHidden.delete(tag);
+        console.log('Showing tag:', tag);
+      } else {
+        newHidden.add(tag);
+        console.log('Hiding tag:', tag);
+      }
+      console.log('New hidden tags:', Array.from(newHidden));
+      return newHidden;
+    });
+  }, []);
+
+  // Select all tags (show all)
+  const selectAll = useCallback(() => {
+    setHiddenTags(new Set());
+  }, []);
+
+  // Select none (hide all)
+  const selectNone = useCallback(() => {
+    // Get all PRIMARY tags from memories
+    const allPrimaryTags = new Set<string>();
+    memories.forEach(memory => {
+      const primaryTag = memory.tags[0] || 'default';
+      allPrimaryTags.add(primaryTag);
+    });
+    console.log('Select None - hiding all primary tags:', Array.from(allPrimaryTags));
+    setHiddenTags(new Set(allPrimaryTags));
+  }, [memories]);
+
+  useEffect(() => {
+    console.log('MemoryGraph received memories:', memories.length);
+    console.log('Filtered memories:', filteredMemories.length);
+    console.log('Search query:', searchQuery);
+    
+    if (!svgRef.current || filteredMemories.length === 0) {
+      console.log('Early return: svgRef.current =', svgRef.current, 'filteredMemories.length =', filteredMemories.length);
+      // Clear the SVG if no matches
+      if (svgRef.current) {
+        const svg = d3.select(svgRef.current);
+        svg.selectAll('*').remove();
+      }
       return;
     }
 
@@ -132,9 +282,9 @@ const MemoryGraph: React.FC<MemoryGraphProps> = ({
     
     svg.attr('width', width).attr('height', height);
 
-    const { nodes, links } = processMemories(memories);
-    console.log('Processed nodes:', nodes);
-    console.log('Processed links:', links);
+    const { nodes, links } = processMemories(filteredMemories);
+    console.log('Processed nodes:', nodes.length);
+    console.log('Processed links:', links.length);
 
     // Create simulation
     const simulation = d3.forceSimulation<MemoryNode>(nodes)
@@ -177,14 +327,15 @@ const MemoryGraph: React.FC<MemoryGraphProps> = ({
       .enter().append('circle')
       .attr('r', (d: MemoryNode) => d.radius)
       .attr('fill', (d: MemoryNode) => {
-        // Highlight if matches search
-        if (searchQuery && (
-          d.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          d.answer.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          d.tags.some((tag: string) => tag.toLowerCase().includes(searchQuery.toLowerCase()))
-        )) {
-          return '#ffd700'; // Gold for search matches
+        // Highlight exact search matches within filtered results
+        if (searchQuery && searchQuery.length > 2) {
+          const exactMatch = d.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            d.answer.toLowerCase().includes(searchQuery.toLowerCase());
+          if (exactMatch) {
+            return '#ffd700'; // Gold for exact matches
+          }
         }
+        
         return d.color;
       })
       .attr('stroke', '#2f2f2f')
@@ -282,24 +433,70 @@ const MemoryGraph: React.FC<MemoryGraphProps> = ({
     return () => {
       simulation.stop();
     };
-  }, [memories, searchQuery, onMemoryClick, tagColors, calculateSimilarity]);
+  }, [filteredMemories, searchQuery, onMemoryClick, tagColors, calculateSimilarity, hiddenTags, memories.length]);
 
   return (
     <div className="memory-graph">
       <svg ref={svgRef} className="graph-svg" />
       
-      {/* Legend */}
+      {/* Dynamic Legend */}
       <div className="graph-legend">
-        <h4>Legend</h4>
-        {Object.entries(tagColors).map(([tag, color]) => (
-          <div key={tag} className="legend-item">
-            <div 
-              className="legend-color" 
-              style={{ backgroundColor: color }}
-            />
-            <span>{tag}</span>
+        <h4>Memory Types</h4>
+        
+        {/* Show search results count */}
+        {searchQuery && (
+          <div className="search-results">
+            <span className="results-count">
+              {filteredMemories.length} of {memories.length} memories
+            </span>
+            {filteredMemories.length === 0 && (
+              <div className="no-results">
+                No memories found for "{searchQuery}"
+              </div>
+            )}
           </div>
-        ))}
+        )}
+        
+        {/* Select All/None Controls */}
+        <div className="tag-controls">
+          <button 
+            className="control-btn"
+            onClick={selectAll}
+            disabled={hiddenTags.size === 0}
+          >
+            Select All
+          </button>
+          <button 
+            className="control-btn"
+            onClick={selectNone}
+            disabled={hiddenTags.size === Object.keys(tagStatus).length}
+          >
+            Select None
+          </button>
+        </div>
+
+        {/* Clickable tag buttons - show ALL actual tags from memories */}
+        {Object.entries(tagStatus).map(([tag, status]) => {
+          const color = tagColors[tag] || tagColors.default;
+          const isHidden = status.isHidden;
+          
+          return (
+            <button
+              key={tag}
+              className={`tag-button ${isHidden ? 'tag-button-hidden' : 'tag-button-visible'}`}
+              onClick={() => toggleTag(tag)}
+            >
+              <div 
+                className="tag-button-color" 
+                style={{ backgroundColor: isHidden ? '#4a4a4a' : color }}
+              />
+              <span className="tag-button-text">{tag}</span>
+              <span className="tag-button-count">
+                {status.visible}/{status.total}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Tooltip */}

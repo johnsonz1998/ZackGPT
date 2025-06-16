@@ -50,6 +50,100 @@
   margin-bottom: 0;
 }
 
+.legend-item-greyed {
+  opacity: 0.5;
+}
+
+.tag-count {
+  margin-left: auto;
+  font-size: 10px;
+  color: #8e8ea0;
+}
+
+/* Tag controls */
+.tag-controls {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #565869;
+}
+
+.control-btn {
+  flex: 1;
+  background-color: #2f2f2f;
+  border: 1px solid #565869;
+  border-radius: 6px;
+  color: #ececec;
+  padding: 6px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.control-btn:hover:not(:disabled) {
+  background-color: #10a37f;
+  border-color: #10a37f;
+}
+
+.control-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Tag buttons */
+.tag-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 8px;
+  margin-bottom: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.tag-button:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  border-color: #565869;
+}
+
+.tag-button-visible {
+  opacity: 1;
+}
+
+.tag-button-hidden {
+  opacity: 0.5;
+  background-color: rgba(74, 74, 74, 0.1);
+}
+
+.tag-button-color {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: background-color 0.2s ease;
+}
+
+.tag-button-text {
+  flex: 1;
+  font-size: 12px;
+  color: #ececec;
+  font-weight: 500;
+}
+
+.tag-button-count {
+  font-size: 10px;
+  color: #8e8ea0;
+  background-color: rgba(255, 255, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 10px;
+}
+
 .legend-color {
   width: 12px;
   height: 12px;
@@ -166,4 +260,55 @@
     opacity: 1;
     transform: translateY(0);
   }
-} 
+}
+
+/* Filter dropdown */
+.filter-section {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #565869;
+}
+
+.filter-label {
+  display: block;
+  color: #ececec;
+  font-size: 12px;
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+.filter-dropdown {
+  width: 100%;
+  background-color: #2f2f2f;
+  border: 1px solid #565869;
+  border-radius: 6px;
+  color: #ececec;
+  padding: 6px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.filter-dropdown:focus {
+  outline: none;
+  border-color: #10a37f;
+}
+
+/* Search results indicator */
+.search-results {
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #565869;
+}
+
+.results-count {
+  color: #45b7d1;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.no-results {
+  color: #ff6b6b;
+  font-size: 11px;
+  margin-top: 4px;
+  font-style: italic;
+}
