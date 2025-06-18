@@ -310,6 +310,81 @@ body {
   position: relative;
 }
 
+/* Expanded Memory View */
+.memory-expanded-view {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.memory-expanded-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+}
+
+.memory-expanded-content {
+  position: relative;
+  background-color: #1a1a1a;
+  border: 1px solid #303030;
+  border-radius: 16px;
+  max-width: 600px;
+  width: 100%;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+}
+
+.memory-expanded-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid #303030;
+  position: sticky;
+  top: 0;
+  background-color: #1a1a1a;
+  z-index: 10;
+}
+
+.memory-expanded-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #ececec;
+}
+
+.memory-close-btn {
+  background: none;
+  border: none;
+  color: #8e8ea0;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: color 0.2s ease, background-color 0.2s ease;
+}
+
+.memory-close-btn:hover {
+  color: #ececec;
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.memory-expanded-body {
+  padding: 24px;
+}
+
 /* Chat Interface */
 .chat-interface {
   flex: 1;

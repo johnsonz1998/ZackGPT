@@ -1,0 +1,107 @@
+.memory-detail-view {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.memory-detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.memory-detail-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #ececec;
+  margin: 0;
+}
+
+.memory-detail-content {
+  background-color: #2f2f2f;
+  border: 1px solid #565869;
+  border-radius: 8px;
+  padding: 12px 16px;
+  color: #ececec;
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 20px;
+}
+
+.memory-detail-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.memory-detail-tag {
+  background-color: #10a37f;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.memory-detail-no-tags {
+  color: #8e8ea0;
+  font-style: italic;
+  font-size: 14px;
+}
+
+.memory-detail-importance {
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.memory-detail-timestamp {
+  color: #8e8ea0;
+  font-size: 14px;
+}
+
+.memory-detail-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #565869;
+}
+
+.memory-edit-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: #10a37f;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.memory-edit-btn:hover {
+  background-color: #0d8c67;
+}
+
+.memory-delete-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: #e74c3c;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.memory-delete-btn:hover {
+  background-color: #c0392b;
+} 

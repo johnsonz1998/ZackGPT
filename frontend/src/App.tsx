@@ -6,6 +6,8 @@ import { v4 as uuidv4 } from 'uuid';
 import SettingsModal from './components/Settings';
 import MemoryGraph from './components/MemoryGraph';
 import MemoryNotification from './components/MemoryNotification';
+import MemoryDetailView from './components/MemoryDetailView';
+import MemoryEditForm from './components/MemoryEditForm';
 import './App.css';
 import './components/MemoryNotification.css';
 
@@ -55,6 +57,8 @@ function App() {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [memorySearchQuery, setMemorySearchQuery] = useState('');
   const [memoryNotifications, setMemoryNotifications] = useState<any[]>([]);
+  const [selectedMemory, setSelectedMemory] = useState<Memory | null>(null);
+  const [isEditingMemory, setIsEditingMemory] = useState(false);
 
   const [showSettings, setShowSettings] = useState(false);
   
@@ -160,6 +164,52 @@ function App() {
     } catch (error) {
       console.error('Failed to load memories:', error);
     }
+  }, []);
+
+  // Update memory
+  const updateMemory = useCallback(async (memoryId: string, updates: Partial<Memory>) => {
+    try {
+      console.log('Updating memory:', memoryId, updates);
+      const response = await fetch(`${API_BASE}/memories/${memoryId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      });
+      
+      console.log('Update response status:', response.status);
+      
+      if (response.ok) {
+        const updatedMemory = await response.json();
+        console.log('Updated memory:', updatedMemory);
+        setMemories(prev => prev.map(m => m.id === memoryId ? updatedMemory : m));
+        setSelectedMemory(updatedMemory);
+        return true;
+      } else {
+        const errorText = await response.text();
+        console.error('Update failed:', response.status, errorText);
+      }
+    } catch (error) {
+      console.error('Failed to update memory:', error);
+    }
+    return false;
+  }, []);
+
+  // Delete memory
+  const deleteMemory = useCallback(async (memoryId: string) => {
+    try {
+      const response = await fetch(`${API_BASE}/memories/${memoryId}`, {
+        method: 'DELETE'
+      });
+      
+      if (response.ok) {
+        setMemories(prev => prev.filter(m => m.id !== memoryId));
+        setSelectedMemory(null);
+        return true;
+      }
+    } catch (error) {
+      console.error('Failed to delete memory:', error);
+    }
+    return false;
   }, []);
 
   // Load messages for a thread
@@ -402,10 +452,56 @@ function App() {
                 memories={memories}
                 searchQuery={memorySearchQuery}
                 onMemoryClick={(memory) => {
-                  console.log('Memory clicked:', memory);
+                  setSelectedMemory(memory);
+                  setIsEditingMemory(false);
                 }}
               />
             </div>
+
+            {/* Expanded Memory View */}
+            {selectedMemory && (
+              <div className="memory-expanded-view">
+                <div className="memory-expanded-overlay" onClick={() => setSelectedMemory(null)} />
+                <div className="memory-expanded-content">
+                  <div className="memory-expanded-header">
+                    <h3>Memory Details</h3>
+                    <button 
+                      className="memory-close-btn"
+                      onClick={() => setSelectedMemory(null)}
+                    >
+                      ×
+                    </button>
+                  </div>
+
+                  <div className="memory-expanded-body">
+                    {isEditingMemory ? (
+                                             <MemoryEditForm
+                         memory={selectedMemory}
+                         onSave={async (updates: Partial<Memory>) => {
+                           const success = await updateMemory(selectedMemory.id, updates);
+                           if (success) {
+                             setIsEditingMemory(false);
+                           } else {
+                             alert('Failed to save memory. Please check the console for details.');
+                           }
+                         }}
+                         onCancel={() => setIsEditingMemory(false)}
+                       />
+                    ) : (
+                      <MemoryDetailView
+                        memory={selectedMemory}
+                        onEdit={() => setIsEditingMemory(true)}
+                        onDelete={async () => {
+                          if (window.confirm('Are you sure you want to delete this memory?')) {
+                            await deleteMemory(selectedMemory.id);
+                          }
+                        }}
+                      />
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         ) : !selectedThread ? (
           /* Welcome Screen */

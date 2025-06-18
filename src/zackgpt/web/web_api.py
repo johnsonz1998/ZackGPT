@@ -415,6 +415,94 @@ async def get_memories():
         debug_error("Failed to get memories", e)
         raise HTTPException(status_code=500, detail=f"Failed to get memories: {str(e)}")
 
+@app.put("/memories/{memory_id}")
+async def update_memory(memory_id: str, updates: Dict[str, Any]):
+    """Update an existing memory."""
+    try:
+        from bson import ObjectId
+        
+        # Validate memory_id format
+        try:
+            obj_id = ObjectId(memory_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid memory ID format")
+        
+        # Find the existing memory
+        existing_memory = memory_manager.db.memories.find_one({"_id": obj_id})
+        if not existing_memory:
+            raise HTTPException(status_code=404, detail="Memory not found")
+        
+        # Prepare update data
+        update_data = {}
+        if "question" in updates:
+            update_data["question"] = updates["question"]
+        if "answer" in updates:
+            update_data["answer"] = updates["answer"]
+        if "tags" in updates:
+            update_data["tags"] = updates["tags"] if isinstance(updates["tags"], list) else []
+        if "importance" in updates and updates["importance"] in ["high", "medium", "low"]:
+            update_data["importance"] = updates["importance"]
+        
+        # Update the memory
+        result = memory_manager.db.memories.update_one(
+            {"_id": obj_id},
+            {"$set": update_data}
+        )
+        
+        if result.modified_count == 0:
+            raise HTTPException(status_code=400, detail="No changes made to memory")
+        
+        # Return updated memory
+        updated_memory = memory_manager.db.memories.find_one({"_id": obj_id})
+        debug_info(f"Updated memory {memory_id}")
+        
+        return {
+            "id": str(updated_memory["_id"]),
+            "question": updated_memory["question"],
+            "answer": updated_memory["answer"],
+            "tags": updated_memory.get("tags", []),
+            "importance": updated_memory.get("importance", "medium"),
+            "timestamp": updated_memory["timestamp"].isoformat() if hasattr(updated_memory.get("timestamp"), 'isoformat') else str(updated_memory.get("timestamp")) if updated_memory.get("timestamp") else None
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        debug_error("Failed to update memory", e)
+        raise HTTPException(status_code=500, detail=f"Failed to update memory: {str(e)}")
+
+@app.delete("/memories/{memory_id}")
+async def delete_memory(memory_id: str):
+    """Delete a memory."""
+    try:
+        from bson import ObjectId
+        
+        # Validate memory_id format
+        try:
+            obj_id = ObjectId(memory_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid memory ID format")
+        
+        # Check if memory exists
+        existing_memory = memory_manager.db.memories.find_one({"_id": obj_id})
+        if not existing_memory:
+            raise HTTPException(status_code=404, detail="Memory not found")
+        
+        # Delete the memory
+        result = memory_manager.db.memories.delete_one({"_id": obj_id})
+        
+        if result.deleted_count == 0:
+            raise HTTPException(status_code=400, detail="Failed to delete memory")
+        
+        debug_info(f"Deleted memory {memory_id}")
+        return {"message": "Memory deleted successfully", "id": memory_id}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        debug_error("Failed to delete memory", e)
+        raise HTTPException(status_code=500, detail=f"Failed to delete memory: {str(e)}")
+
 @app.post("/config/reset", response_model=ZackGPTConfig)
 async def reset_config():
     """Reset configuration to defaults."""
