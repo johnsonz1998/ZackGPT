@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# ZackGPT Root Launcher - Restructured Repository  
-# Delegates to the new consolidated launcher
+# ZackGPT Root Launcher - Clean & Direct
+# Direct entry to the centralized launcher
 
-exec ./scripts/launcher/zackgpt.sh "$@" 
+exec python3 launcher/main.py "$@" 

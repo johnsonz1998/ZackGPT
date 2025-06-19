@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CORS Test</title>
+</head>
+<body>
+    <h1>ZackGPT CORS Test</h1>
+    <button onclick="testMemories()">Test Load Memories</button>
+    <button onclick="testHealth()">Test Health Check</button>
+    <div id="result"></div>
+
+    <script>
+        async function testHealth() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = 'Testing health endpoint...';
+            
+            try {
+                const response = await fetch('http://localhost:8000/health');
+                const data = await response.json();
+                resultDiv.innerHTML = `✅ Health check: ${JSON.stringify(data, null, 2)}`;
+            } catch (error) {
+                resultDiv.innerHTML = `❌ Health check failed: ${error.message}`;
+            }
+        }
+
+        async function testMemories() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = 'Testing memories endpoint...';
+            
+            try {
+                const response = await fetch('http://localhost:8000/memories');
+                
+                if (response.ok) {
+                    const memories = await response.json();
+                    resultDiv.innerHTML = `✅ Loaded ${memories.length} memories successfully!<br><pre>${JSON.stringify(memories.slice(0, 2), null, 2)}</pre>`;
+                } else {
+                    resultDiv.innerHTML = `❌ Memories request failed: ${response.status} ${response.statusText}`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `❌ Memories request failed: ${error.message}`;
+                console.error('Full error:', error);
+            }
+        }
+
+        // Auto-test on page load
+        window.onload = () => {
+            console.log('Testing from origin:', window.location.origin);
+            testHealth();
+        };
+    </script>
+</body>
+</html> 

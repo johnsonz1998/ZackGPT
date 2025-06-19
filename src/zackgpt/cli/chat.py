@@ -105,4 +105,8 @@ def run_text_mode():
             print("I encountered an error. Please try again.")
 
 if __name__ == "__main__":
+    run_text_mode()
+
+def main():
+    """Entry point for console script in pyproject.toml"""
     run_text_mode() 

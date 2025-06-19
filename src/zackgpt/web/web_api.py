@@ -127,7 +127,14 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for development
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000", 
+        "http://localhost:4200",
+        "http://127.0.0.1:4200",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000"
+    ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
@@ -475,23 +482,15 @@ async def update_memory(memory_id: str, updates: Dict[str, Any]):
 async def delete_memory(memory_id: str):
     """Delete a memory."""
     try:
-        from bson import ObjectId
-        
-        # Validate memory_id format
-        try:
-            obj_id = ObjectId(memory_id)
-        except Exception:
-            raise HTTPException(status_code=400, detail="Invalid memory ID format")
-        
-        # Check if memory exists
-        existing_memory = memory_manager.db.memories.find_one({"_id": obj_id})
+        # Check if memory exists (using UUID string directly)
+        existing_memory = memory_manager.db.memories.find_one({"_id": memory_id})
         if not existing_memory:
             raise HTTPException(status_code=404, detail="Memory not found")
         
-        # Delete the memory
-        result = memory_manager.db.memories.delete_one({"_id": obj_id})
+        # Delete the memory using database layer method
+        deleted = memory_manager.db.delete_memory(memory_id)
         
-        if result.deleted_count == 0:
+        if not deleted:
             raise HTTPException(status_code=400, detail="Failed to delete memory")
         
         debug_info(f"Deleted memory {memory_id}")
@@ -623,7 +622,11 @@ async def startup_event():
     """Initialize the application on startup."""
     debug_success("ZackGPT Web API started", {
         "port": "8000",
-        "cors_origins": ["http://localhost:4200", "http://127.0.0.1:4200"],
+        "cors_origins": [
+            "http://localhost:3000", "http://127.0.0.1:3000",
+            "http://localhost:4200", "http://127.0.0.1:4200",
+            "http://localhost:8000", "http://127.0.0.1:8000"
+        ],
         "websocket_enabled": True
     })
 
@@ -656,4 +659,8 @@ def run_server(host: str = "0.0.0.0", port: int = 8000, debug: bool = True):
     server.run()
 
 if __name__ == "__main__":
+    run_server()
+
+def main():
+    """Entry point for console script in pyproject.toml"""
     run_server() 

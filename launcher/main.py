@@ -55,7 +55,7 @@ def launch_cli_mode():
     try:
         # Use the dedicated CLI launcher
         result = subprocess.run([
-            "bash", "cli/scripts/zackgpt-cli.sh"
+            "bash", "scripts/ops/zackgpt-cli.sh"
         ], cwd=os.getcwd())
         
         if result.returncode != 0:

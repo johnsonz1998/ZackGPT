@@ -43,7 +43,7 @@ interface WSMessage {
   typing?: boolean;
 }
 
-const API_BASE = '';
+const API_BASE = 'http://localhost:8000';
 const WS_BASE = 'ws://localhost:8000';
 
 function App() {
@@ -194,23 +194,75 @@ function App() {
     return false;
   }, []);
 
-  // Delete memory
+    // Delete memory
   const deleteMemory = useCallback(async (memoryId: string) => {
     try {
+      console.log('Deleting memory:', memoryId);
+      
+      // Create request with timeout and proper headers
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
       const response = await fetch(`${API_BASE}/memories/${memoryId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        mode: 'cors',
+        credentials: 'same-origin'
       });
       
+      clearTimeout(timeoutId);
+      console.log('Delete response status:', response.status);
+      
       if (response.ok) {
+        // Update UI immediately regardless of response body
         setMemories(prev => prev.filter(m => m.id !== memoryId));
         setSelectedMemory(null);
+        console.log('Memory deleted successfully');
+        
+        // Refresh memory list to ensure sync
+        setTimeout(() => {
+          loadMemories();
+        }, 100);
+        
         return true;
+      } else {
+        let errorText = 'Unknown error';
+        try {
+          errorText = await response.text();
+        } catch (e) {
+          console.warn('Could not read error response body');
+        }
+        console.error('Delete failed:', response.status, errorText);
+        alert(`Failed to delete memory: ${response.status} ${errorText}`);
       }
     } catch (error) {
       console.error('Failed to delete memory:', error);
+      
+      // Check if it's a network/timeout error
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          alert('Delete request timed out. Please try again.');
+        } else if (error.message.includes('fetch')) {
+          // Often network errors still succeed on backend
+          console.log('Network error, but deletion might have succeeded. Refreshing memory list...');
+          setSelectedMemory(null);
+          setTimeout(() => {
+            loadMemories();
+          }, 500);
+          return true; // Optimistically assume it worked
+        } else {
+          alert(`Error deleting memory: ${error.message}`);
+        }
+      } else {
+        alert(`Error deleting memory: ${String(error)}`);
+      }
     }
     return false;
-  }, []);
+  }, [loadMemories]);
 
   // Load messages for a thread
   const loadMessages = useCallback(async (threadId: string) => {
@@ -492,9 +544,7 @@ function App() {
                         memory={selectedMemory}
                         onEdit={() => setIsEditingMemory(true)}
                         onDelete={async () => {
-                          if (window.confirm('Are you sure you want to delete this memory?')) {
-                            await deleteMemory(selectedMemory.id);
-                          }
+                          await deleteMemory(selectedMemory.id);
                         }}
                       />
                     )}

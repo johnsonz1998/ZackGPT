@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Memory Delete</title>
+</head>
+<body>
+    <h1>Memory Delete Test</h1>
+    <button onclick="testDelete()">Test Delete Memory</button>
+    <div id="result"></div>
+
+    <script>
+        async function testDelete() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = 'Testing delete...';
+            
+            try {
+                // First get all memories to see available IDs
+                const memResponse = await fetch('http://localhost:8000/memories');
+                const memories = await memResponse.json();
+                
+                if (memories.length === 0) {
+                    resultDiv.innerHTML = 'No memories to delete';
+                    return;
+                }
+                
+                const memoryToDelete = memories[0];
+                console.log('Deleting memory:', memoryToDelete);
+                
+                // Try to delete the first memory
+                const deleteResponse = await fetch(`http://localhost:8000/memories/${memoryToDelete.id}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                    },
+                    mode: 'cors'
+                });
+                
+                console.log('Delete response:', deleteResponse);
+                
+                if (deleteResponse.ok) {
+                    const result = await deleteResponse.json();
+                    resultDiv.innerHTML = `✅ Successfully deleted memory: ${result.id}`;
+                } else {
+                    const errorText = await deleteResponse.text();
+                    resultDiv.innerHTML = `❌ Delete failed: ${deleteResponse.status} ${errorText}`;
+                }
+                
+            } catch (error) {
+                console.error('Delete error:', error);
+                resultDiv.innerHTML = `❌ Error: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html> 
