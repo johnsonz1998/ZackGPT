@@ -4,18 +4,18 @@
       {
         "name": "witty_efficient",
         "content": "Be witty, sarcastic, and brutally efficient like Zack.",
-        "weight": 0.422278919873365,
-        "success_rate": 0.2111394599366825,
-        "usage_count": 102,
-        "last_used": "2025-06-16T05:10:27.449923"
+        "weight": 0.3800510278860285,
+        "success_rate": 0.19002551394301426,
+        "usage_count": 103,
+        "last_used": "2025-06-19T03:16:07.190361"
       },
       {
         "name": "direct_helpful",
         "content": "Be direct, helpful, and cut through the noise.",
-        "weight": 0.4902804937408656,
-        "success_rate": 0.2451402468704328,
-        "usage_count": 121,
-        "last_used": "2025-06-16T05:12:31.052658"
+        "weight": 0.441252444366779,
+        "success_rate": 0.2206262221833895,
+        "usage_count": 122,
+        "last_used": "2025-06-19T03:27:21.418016"
       },
       {
         "name": "sharp_precise",
@@ -30,18 +30,18 @@
       {
         "name": "conservative",
         "content": "Only save memories you're 100% confident about.",
-        "weight": 0.3394479811478295,
-        "success_rate": 0.16972399057391474,
-        "usage_count": 112,
-        "last_used": "2025-06-16T05:18:48.342230"
+        "weight": 0.3055031830330465,
+        "success_rate": 0.15275159151652326,
+        "usage_count": 113,
+        "last_used": "2025-06-19T03:27:21.418101"
       },
       {
         "name": "balanced",
         "content": "Save relevant information but acknowledge uncertainty.",
-        "weight": 0.5680929867111012,
-        "success_rate": 0.2840464933555506,
-        "usage_count": 124,
-        "last_used": "2025-06-16T05:10:27.450049"
+        "weight": 0.5112836880399911,
+        "success_rate": 0.25564184401999557,
+        "usage_count": 125,
+        "last_used": "2025-06-19T03:16:07.190474"
       },
       {
         "name": "contextual",
@@ -64,18 +64,18 @@
       {
         "name": "solution_focused",
         "content": "Focus on actionable insights and solutions.",
-        "weight": 0.28100657265628487,
-        "success_rate": 0.14050328632814243,
-        "usage_count": 113,
-        "last_used": "2025-06-16T05:09:24.854431"
+        "weight": 0.2529059153906564,
+        "success_rate": 0.1264529576953282,
+        "usage_count": 114,
+        "last_used": "2025-06-19T03:16:07.190590"
       },
       {
         "name": "efficiency_minded",
         "content": "Be efficient\u2014don't waste time with unnecessary explanations.",
-        "weight": 0.5999910903976661,
-        "success_rate": 0.29999554519883304,
-        "usage_count": 120,
-        "last_used": "2025-06-16T05:18:48.342351"
+        "weight": 0.5399919813578995,
+        "success_rate": 0.26999599067894975,
+        "usage_count": 121,
+        "last_used": "2025-06-19T03:27:21.418175"
       }
     ],
     "context_framers": [
@@ -90,33 +90,33 @@
       {
         "name": "conversation_aware",
         "content": "Consider the flow and context of the current conversation.",
-        "weight": 0.5029575084950183,
-        "success_rate": 0.25147875424750915,
-        "usage_count": 168,
-        "last_used": "2025-06-16T05:18:48.342467"
+        "weight": 0.4073955818809648,
+        "success_rate": 0.2036977909404824,
+        "usage_count": 170,
+        "last_used": "2025-06-19T03:27:21.418874"
       }
     ],
     "output_formatters": [
       {
         "name": "concise_actionable",
         "content": "Keep responses concise and actionable.",
-        "weight": 0.43742969465389303,
-        "success_rate": 0.21871484732694652,
-        "usage_count": 164,
-        "last_used": "2025-06-16T03:54:10.906271"
+        "weight": 0.39368672518850373,
+        "success_rate": 0.19684336259425186,
+        "usage_count": 165,
+        "last_used": "2025-06-19T03:27:21.418974"
       },
       {
         "name": "structured_clear",
         "content": "Structure responses clearly with key points highlighted.",
-        "weight": 0.4547039175959993,
-        "success_rate": 0.22735195879799966,
-        "usage_count": 196,
-        "last_used": "2025-06-16T05:18:48.342554"
+        "weight": 0.4092335258363994,
+        "success_rate": 0.2046167629181997,
+        "usage_count": 197,
+        "last_used": "2025-06-19T03:16:07.191447"
       }
     ]
   },
   "experiments": [],
-  "last_updated": "2025-06-16T05:18:48.342888",
+  "last_updated": "2025-06-19T03:27:21.419238",
   "settings": {
     "experimentation_rate": 0.1,
     "learning_rate": 0.1,

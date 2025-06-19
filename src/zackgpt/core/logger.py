@@ -50,7 +50,6 @@ DEBUG_MODE = os.getenv("DEBUG_MODE", "false").lower() == "true"
 
 # Analytics settings - separate from main MongoDB
 LOG_AGGREGATION_ENABLED = os.getenv("LOG_AGGREGATION_ENABLED", "false").lower() == "true"
-ANALYTICS_DB_PATH = os.getenv("ANALYTICS_DB_PATH", "logs/analytics.db")
 
 class LogError(Exception):
     """Custom exception for logging errors"""

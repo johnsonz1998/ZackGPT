@@ -4,13 +4,13 @@ import uuid
 from pathlib import Path
 from typing import Dict
 from openai import OpenAI
-from .database import get_database
+from ..data.database import get_database
 from .logger import debug_log, debug_info, debug_error, debug_success
 from config import config
-from .prompt_utils import load_prompt
+# Removed deprecated prompt_utils import - using EvolutionaryPromptBuilder instead
 import tiktoken
 from .prompt_builder import EvolutionaryPromptBuilder
-from .web_search import search_web, get_webpage_content, WEB_SEARCH_ENABLED
+from ..tools.web_search import search_web, get_webpage_content, WEB_SEARCH_ENABLED
 
 class ConversationManager:
     def __init__(self, max_tokens=4000, max_messages=10):
@@ -74,7 +74,6 @@ class CoreAssistant:
         self.client = OpenAI(api_key=config.OPENAI_API_KEY)
         self.model = config.LLM_MODEL
         self._memory_db = None
-        self._prompt = None
         self.conversation = ConversationManager()
         self.prompt_builder = EvolutionaryPromptBuilder()
         
@@ -85,12 +84,7 @@ class CoreAssistant:
             self._memory_db = get_database()
         return self._memory_db
         
-    @property
-    def prompt(self) -> str:
-        """Lazy load core assistant prompt."""
-        if self._prompt is None:
-            self._prompt = load_prompt("core_assistant")
-        return self._prompt
+    # Removed deprecated prompt property - using EvolutionaryPromptBuilder instead
         
     def build_context(self, user_input: str, agent: str = "core_assistant") -> list:
         """Build context from relevant memories and conversation history."""

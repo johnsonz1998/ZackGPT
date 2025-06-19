@@ -5,7 +5,7 @@ import time
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 from config import config
-from .prompt_utils import load_prompt
+from ..archive.prompt_utils import load_prompt
 from .logger import debug_log, debug_info, debug_success, log_component_selection, log_user_rating, log_component_performance_update
 from .prompt_enhancer import HybridPromptEnhancer
 

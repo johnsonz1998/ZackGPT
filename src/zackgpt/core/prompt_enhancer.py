@@ -259,7 +259,7 @@ class LocalPromptHelper:
         
         if enhancer_config.use_local_fallback:
             try:
-                from .local_llm import run_local_model
+                from ..archive.local_llm import run_local_model
                 self.run_local_model = run_local_model
                 self.available = True
                 debug_info("Local model helper available")

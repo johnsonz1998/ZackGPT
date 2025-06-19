@@ -77,7 +77,7 @@ async def get_status():
         web_search_working = False
         try:
             sys.path.insert(0, str(Path(__file__).parent.parent))
-            from .web_search import search_web
+            from ..tools.web_search import search_web
             result = search_web("test", max_results=1)
             web_search_working = bool(result and len(result) > 10)
         except:
@@ -167,7 +167,7 @@ async def test_web_search():
     """Test web search functionality."""
     try:
         sys.path.insert(0, str(Path(__file__).parent.parent))
-        from .web_search import search_web, WEB_SEARCH_ENABLED
+        from ..tools.web_search import search_web, WEB_SEARCH_ENABLED
         
         if not WEB_SEARCH_ENABLED:
             return {

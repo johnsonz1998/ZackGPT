@@ -110,8 +110,11 @@ class ConnectionManager:
             await connection.send_text(message)
 
 # Import the new persistent managers
-from ..core.thread_manager import PersistentThreadManager, Thread, ChatMessage
-from ..core.memory_manager import PersistentMemoryManager
+from ..data.thread_manager import PersistentThreadManager, Thread, ChatMessage
+from ..data.memory_manager import PersistentMemoryManager
+
+# Import the memory graph API router
+from .memory_graph_api import router as memory_graph_router
 
 # =============================
 #        GLOBAL INSTANCES
@@ -140,6 +143,9 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["*"]
 )
+
+# Include sub-routers
+app.include_router(memory_graph_router)
 
 # Global instances
 connection_manager = ConnectionManager()
