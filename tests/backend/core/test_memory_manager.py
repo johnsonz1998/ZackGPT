@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from src.zackgpt.core.memory_manager import PersistentMemoryManager
+from src.zackgpt.data.memory_manager import MemoryManager as PersistentMemoryManager
 
 @pytest.fixture
 def mock_openai():
@@ -47,9 +47,9 @@ def mock_openai():
 def memory_manager(mock_openai):
     """Create a test memory manager instance with mocked OpenAI."""
     import uuid
-    # Mock get_database to return a fresh test database
-    with patch('src.zackgpt.core.memory_manager.get_database') as mock_get_db:
-        from src.zackgpt.core.database import ZackGPTDatabase
+            # Mock get_database to return a fresh test database
+    with patch('src.zackgpt.data.memory_manager.get_database') as mock_get_db:
+        from src.zackgpt.data.database import Database as ZackGPTDatabase
         test_db_name = f"test_memory_{uuid.uuid4().hex[:8]}"
         mongo_uri = f"mongodb://localhost:27017/{test_db_name}"
         test_db = ZackGPTDatabase(mongo_uri)

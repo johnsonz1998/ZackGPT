@@ -9,7 +9,7 @@ from src.zackgpt.core.logger import (
     debug_log, debug_error, debug_success, debug_warning, debug_info,
     log_learning_event, log_component_selection, log_user_rating,
     log_component_performance_update, log_performance_metric,
-    LogAggregator, PerformanceMetrics, log_performance
+    AnalyticsDatabase, PerformanceMetrics, log_performance
 )
 
 @pytest.fixture
@@ -25,9 +25,14 @@ def db_path(tmp_path):
     return tmp_path / "test_logs.db"
 
 @pytest.fixture
+def analytics_db(db_path):
+    """Create an AnalyticsDatabase instance with a test database."""
+    return AnalyticsDatabase(f"mongodb://localhost:27017/test_{db_path.stem}")
+
+@pytest.fixture
 def log_aggregator(db_path):
-    """Create a LogAggregator instance with a test database."""
-    return LogAggregator(str(db_path))
+    """Create an AnalyticsDatabase instance with a test database."""
+    return AnalyticsDatabase(f"mongodb://localhost:27017/test_{db_path.stem}")
 
 @pytest.fixture
 def perf_metrics():

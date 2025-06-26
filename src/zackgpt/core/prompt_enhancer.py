@@ -4,7 +4,19 @@ import random
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 from openai import OpenAI
-import config.config as config
+try:
+    import config.config as config
+except ImportError:
+    # Fallback for when config module is not available
+    class MockConfig:
+        PROMPT_ENHANCER_USE_CLOUD = True
+        PROMPT_ENHANCER_USE_LOCAL = True
+        PROMPT_ENHANCER_MODEL = "gpt-4-turbo"
+        PROMPT_ENHANCER_DEBUG = False
+        OPENAI_API_KEY = None
+        LLM_MODEL = "gpt-4"
+        PROMPT_ENHANCER_GENERATION_RATE = 0.3
+    config = MockConfig()
 from .logger import debug_log, debug_info, debug_error, debug_success
 
 class PromptEnhancerConfig:
@@ -130,9 +142,12 @@ class CloudPromptGenerator:
     def __init__(self, enhancer_config: PromptEnhancerConfig):
         self.config = enhancer_config
         try:
-            self.client = OpenAI(api_key=config.OPENAI_API_KEY)
-        except:
-            self.client = OpenAI()  # Use default API key
+            # Use the robust client creation
+            from .query_utils import create_openai_client
+            self.client = create_openai_client()
+        except Exception as e:
+            print(f"Warning: Failed to initialize OpenAI client: {e}")
+            self.client = None
         
     def generate_component(self, component_type: str, context: Dict, successful_examples: List[str] = None) -> str:
         """Generate new prompt components using cloud AI - this IS useful."""

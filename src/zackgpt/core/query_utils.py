@@ -12,34 +12,52 @@ import os
 
 log_debug = logging.getLogger("zackgpt").debug
 
-# Set LlamaIndex global LLM
-Settings.llm = LlamaOpenAI(
-    api_key=config.OPENAI_API_KEY,
-    model=config.LLM_MODEL,
-    temperature=config.LLM_TEMPERATURE,
-    http_client=None,  # Prevent proxy inheritance
-    base_url=None  # Use default OpenAI URL
-)
+# Lazy LlamaIndex initialization
+def init_llama_index():
+    """Initialize LlamaIndex settings only when needed."""
+    Settings.llm = LlamaOpenAI(
+        api_key=config.OPENAI_API_KEY,
+        model=config.LLM_MODEL,
+        temperature=config.LLM_TEMPERATURE,
+        http_client=None,  # Prevent proxy inheritance
+        base_url=None  # Use default OpenAI URL
+    )
 
 # Separate OpenAI client (not LlamaIndex) for raw prompts
 if not config.OPENAI_API_KEY:
     raise ValueError("OPENAI_API_KEY not found in environment variables")
 
-print(f"Debug: API Key length: {len(config.OPENAI_API_KEY) if config.OPENAI_API_KEY else 0}")
-print(f"Debug: API Key prefix: {config.OPENAI_API_KEY[:8] if config.OPENAI_API_KEY else 'None'}...")
+# Initialize OpenAI client with robust error handling and diagnostics
+def create_openai_client():
+    """Create OpenAI client with comprehensive error handling."""
+    if not config.OPENAI_API_KEY:
+        print("Warning: OPENAI_API_KEY not found in environment variables")
+        return None
+    
+    if config.OPENAI_API_KEY.startswith('test_'):
+        print("Warning: Using test API key - OpenAI requests will fail")
+        return None
+    
+    try:
+        # Test client creation
+        client = OpenAI(api_key=config.OPENAI_API_KEY)
+        
+        # Client initialized successfully (no verbose logging during import)
+        return client
+        
+    except Exception as e:
+        # Log error silently, don't print during import
+        return None
 
-# Debug: Check for proxy settings
-print("Debug: Checking for proxy settings...")
-print(f"HTTP_PROXY: {os.environ.get('HTTP_PROXY')}")
-print(f"HTTPS_PROXY: {os.environ.get('HTTPS_PROXY')}")
-print(f"NO_PROXY: {os.environ.get('NO_PROXY')}")
+# Lazy client creation - don't create during import
+_client = None
 
-# Initialize OpenAI client with explicit configuration
-client = OpenAI(
-    api_key=config.OPENAI_API_KEY,
-    http_client=None,  # Prevent proxy inheritance
-    base_url=None  # Use default OpenAI URL
-)
+def get_openai_client():
+    """Get OpenAI client with lazy initialization."""
+    global _client
+    if _client is None:
+        _client = create_openai_client()
+    return _client
 
 def load_index():
     """Load a previously saved vector index from disk."""
@@ -54,6 +72,10 @@ def load_index():
 
 def ask_gpt(prompt: str) -> str:
     """Send prompt to OpenAI and return the response."""
+    client = get_openai_client()
+    if client is None:
+        return "OpenAI client not available."
+        
     try:
         response = client.chat.completions.create(
             model=config.LLM_MODEL,

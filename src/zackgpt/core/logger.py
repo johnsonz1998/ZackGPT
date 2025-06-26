@@ -221,8 +221,15 @@ class AnalyticsDatabase:
             except Exception as e:
                 print(f"❌ Analytics error: {e}")
 
-# Global analytics database instance
-_analytics_db = AnalyticsDatabase() if LOG_AGGREGATION_ENABLED else None
+# Lazy analytics database instance - don't create during import
+_analytics_db = None
+
+def get_analytics_db():
+    """Get analytics database with lazy initialization."""
+    global _analytics_db
+    if _analytics_db is None and LOG_AGGREGATION_ENABLED:
+        _analytics_db = AnalyticsDatabase()
+    return _analytics_db
 
 def _sanitize_sensitive_data(data: Any) -> Any:
     """Sanitize sensitive data before logging."""
@@ -263,9 +270,10 @@ def debug_log(message: str, data: Optional[Any] = None, prefix: str = "🔍") ->
     # Also log to file using the logger
     logger.debug(output)
     
-    # Aggregate for analysis
-    if _analytics_db:
-        _analytics_db.log_system_event("DEBUG", "debug_log", message, data)
+    # Aggregate for analysis (lazy)
+    analytics_db = get_analytics_db()
+    if analytics_db:
+        analytics_db.log_system_event("DEBUG", "debug_log", message, data)
 
 def debug_error(message: str, error: Optional[Exception] = None) -> None:
     """Log error messages with optional exception details."""
@@ -279,8 +287,9 @@ def debug_error(message: str, error: Optional[Exception] = None) -> None:
     print(output)
     
     error_data = {"error": str(error)} if error else None
-    if _analytics_db:
-        _analytics_db.log_system_event("ERROR", "error", message, error_data, error)
+    analytics_db = get_analytics_db()
+    if analytics_db:
+        analytics_db.log_system_event("ERROR", "error", message, error_data, error)
 
 def debug_success(message: str, data: Optional[Any] = None) -> None:
     """Log success messages with optional data."""

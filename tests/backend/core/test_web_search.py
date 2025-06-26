@@ -1,7 +1,7 @@
 import pytest
 import requests
 from unittest.mock import Mock, patch, MagicMock
-from src.zackgpt.core.web_search import (
+from src.zackgpt.tools.web_search import (
     WebSearchTool,
     WebSearchError,
     search_web,
@@ -59,8 +59,8 @@ class TestWebSearchTool:
         assert web_search_tool.session is not None
         assert hasattr(web_search_tool, 'search')
     
-    @patch('src.zackgpt.core.web_search.WEB_SEARCH_ENABLED', True)
-    @patch('src.zackgpt.core.web_search.SERPAPI_KEY', 'test_key')
+    @patch('src.zackgpt.tools.web_search.WEB_SEARCH_ENABLED', True)
+    @patch('src.zackgpt.tools.web_search.SERPAPI_KEY', 'test_key')
     @patch('requests.Session.get')
     def test_serpapi_search(self, mock_get, web_search_tool, mock_serpapi_response):
         """Test SerpAPI search."""
@@ -76,9 +76,9 @@ class TestWebSearchTool:
         assert results[0]['source'] == 'serpapi'
         assert results[1]['title'] == 'Test Result 2'
     
-    @patch('src.zackgpt.core.web_search.WEB_SEARCH_ENABLED', True)
-    @patch('src.zackgpt.core.web_search.GOOGLE_API_KEY', 'test_key')
-    @patch('src.zackgpt.core.web_search.GOOGLE_CSE_ID', 'test_cse')
+    @patch('src.zackgpt.tools.web_search.WEB_SEARCH_ENABLED', True)
+    @patch('src.zackgpt.tools.web_search.GOOGLE_API_KEY', 'test_key')
+    @patch('src.zackgpt.tools.web_search.GOOGLE_CSE_ID', 'test_cse')
     @patch('requests.Session.get')
     def test_google_custom_search(self, mock_get, web_search_tool, mock_google_response):
         """Test Google Custom Search."""
@@ -93,15 +93,15 @@ class TestWebSearchTool:
         assert results[0]['title'] == 'Google Result 1'
         assert results[0]['source'] == 'google_custom'
     
-    @patch('src.zackgpt.core.web_search.WEB_SEARCH_ENABLED', False)
+    @patch('src.zackgpt.tools.web_search.WEB_SEARCH_ENABLED', False)
     def test_search_disabled(self, web_search_tool):
         """Test search when disabled."""
         with pytest.raises(WebSearchError, match="Web search is disabled"):
             web_search_tool.search("test query")
     
-    @patch('src.zackgpt.core.web_search.WEB_SEARCH_ENABLED', True)
-    @patch('src.zackgpt.core.web_search.SERPAPI_KEY', '')
-    @patch('src.zackgpt.core.web_search.GOOGLE_API_KEY', '')
+    @patch('src.zackgpt.tools.web_search.WEB_SEARCH_ENABLED', True)
+    @patch('src.zackgpt.tools.web_search.SERPAPI_KEY', '')
+    @patch('src.zackgpt.tools.web_search.GOOGLE_API_KEY', '')
     @patch('requests.Session.get')
     def test_duckduckgo_fallback(self, mock_get, web_search_tool):
         """Test DuckDuckGo fallback search."""
@@ -121,9 +121,9 @@ class TestWebSearchTool:
     
     def test_get_available_engines(self, web_search_tool):
         """Test getting available search engines."""
-        with patch('src.zackgpt.core.web_search.SERPAPI_KEY', 'test'):
-            with patch('src.zackgpt.core.web_search.GOOGLE_API_KEY', 'test'):
-                with patch('src.zackgpt.core.web_search.GOOGLE_CSE_ID', 'test'):
+        with patch('src.zackgpt.tools.web_search.SERPAPI_KEY', 'test'):
+            with patch('src.zackgpt.tools.web_search.GOOGLE_API_KEY', 'test'):
+                with patch('src.zackgpt.tools.web_search.GOOGLE_CSE_ID', 'test'):
                     engines = web_search_tool._get_available_engines()
                     assert 'serpapi' in engines
                     assert 'google_custom' in engines
@@ -132,7 +132,7 @@ class TestWebSearchTool:
 class TestWebSearchFunctions:
     """Test web search utility functions."""
     
-    @patch('src.zackgpt.core.web_search.WEB_SEARCH_ENABLED', True)
+    @patch('src.zackgpt.tools.web_search.WEB_SEARCH_ENABLED', True)
     @patch('requests.Session.get')
     def test_search_web_function(self, mock_get):
         """Test the search_web utility function."""

@@ -8,6 +8,12 @@ from config import config
 from ..archive.prompt_utils import load_prompt
 from .logger import debug_log, debug_info, debug_success, log_component_selection, log_user_rating, log_component_performance_update
 from .prompt_enhancer import HybridPromptEnhancer
+from .intelligence_amplifier import (
+    IntelligentContextCompressor,
+    PersonalityEmergenceEngine, 
+    ContextualIntelligenceAmplifier,
+    DynamicTokenAllocator
+)
 
 # Modular memory guidelines
 AGGRESSIVE_MEMORY_GUIDELINES = """
@@ -98,6 +104,12 @@ class GenerativePromptEvolver:
         
         # AI-powered enhancement system
         self.ai_enhancer = HybridPromptEnhancer()
+        
+        # Intelligence amplification components
+        self.context_compressor = IntelligentContextCompressor()
+        self.personality_engine = PersonalityEmergenceEngine()
+        self.intelligence_amplifier = ContextualIntelligenceAmplifier()
+        self.token_allocator = DynamicTokenAllocator()
         
         self._load_settings()
         self.load_evolution_data()
@@ -269,27 +281,59 @@ class GenerativePromptEvolver:
         )
     
     def build_adaptive_prompt(self, context: Dict) -> Tuple[str, Dict]:
-        """Build a prompt using statistical learning and contextual adaptation."""
+        """Build a super-intelligent prompt using statistical learning and intelligence amplification."""
         
-        debug_info("🔨 Building adaptive prompt", {
+        debug_info("🚀 Building super-intelligent adaptive prompt", {
             "context_type": context.get('conversation_type', 'general'),
             "context_keys": list(context.keys()),
-            "total_components": sum(len(comps) for comps in self.components.values())
+            "total_components": sum(len(comps) for comps in self.components.values()),
+            "intelligence_features": ["memory_compression", "personality_emergence", "contextual_intelligence", "token_optimization"]
         })
         
-        # Analyze context to determine strategy
+        # Step 1: Intelligent context analysis
+        conversation_history = context.get('conversation_history', [])
+        current_query = context.get('current_query', '')
+        
+        # Enhance context with intelligence amplifier
+        enhanced_context = self.intelligence_amplifier.analyze_conversation_context(
+            conversation_history, current_query
+        )
+        context.update(enhanced_context)
+        
+        # Step 2: Optimize token allocation
+        available_tokens = context.get('max_tokens', 4000)
+        token_allocation = self.token_allocator.calculate_optimal_allocation(
+            current_query, available_tokens, context
+        )
+        
+        # Step 3: Compress memory context intelligently
+        memories = context.get('memories', [])
+        memory_budget = token_allocation.get('memory_context', 1600)
+        compressed_memory_context, compression_stats = self.context_compressor.compress_memory_context(
+            memories, current_query, memory_budget
+        )
+        
+        # Step 4: Generate dynamic personality adaptation
+        personality_adaptation = self.personality_engine.generate_personality_adaptation()
+        
+        # Step 5: Generate contextual intelligence awareness
+        context_awareness = self.intelligence_amplifier.generate_context_awareness(context)
+        
+        # Step 6: Analyze context to determine strategy
         strategy = self._analyze_context(context)
         
-        debug_info(f"📋 Selected strategy: {strategy}", {
-            "context_analysis": {
-                "conversation_length": context.get('conversation_length', 0),
-                "recent_errors": context.get('recent_errors', 0),
-                "user_expertise": context.get('user_expertise', 'unknown'),
-                "task_complexity": context.get('task_complexity', 'unknown')
-            }
+        debug_info(f"🧠 Intelligence analysis complete", {
+            "enhanced_context": {k: v for k, v in enhanced_context.items() if k != 'conversation_history'},
+            "token_allocation": token_allocation,
+            "memory_compression": {
+                "original_memories": len(memories),
+                "compressed_memories": compression_stats.get('memories_included', 0),
+                "compression_ratio": f"{compression_stats.get('compression_ratio', 0):.2%}"
+            },
+            "strategy": strategy
         })
         
-        # Select components for each type
+        # Step 7: Select components for each type with enhanced context
         selected_components = {}
         for comp_type in self.components.keys():
             component = self._select_component(comp_type, strategy, context)
@@ -301,16 +345,32 @@ class GenerativePromptEvolver:
             "avg_success_rate": sum(comp.success_rate for comp in selected_components.values()) / len(selected_components)
         })
         
-        # Build the final prompt
-        prompt = self._construct_prompt_with_base_template(selected_components, context)
+        # Step 8: Build the final super-intelligent prompt
+        enhanced_context_for_prompt = {
+            **context,
+            'compressed_memory_context': compressed_memory_context,
+            'personality_adaptation': personality_adaptation,
+            'context_awareness': context_awareness,
+            'token_allocation': token_allocation
+        }
         
-        # Create metadata for tracking
+        prompt = self._construct_intelligent_prompt(selected_components, enhanced_context_for_prompt)
+        
+        # Create enhanced metadata for tracking
         metadata = {
             'strategy': strategy,
             'components': {k: v.name for k, v in selected_components.items()},
+            'intelligence_features': {
+                'memory_compression': compression_stats,
+                'personality_adaptation': personality_adaptation[:100] + "..." if len(personality_adaptation) > 100 else personality_adaptation,
+                'context_awareness': context_awareness[:100] + "..." if len(context_awareness) > 100 else context_awareness,
+                'token_allocation': token_allocation
+            },
             'context_summary': {
                 'type': context.get('conversation_type', 'general'),
-                'complexity': context.get('task_complexity', 'unknown')
+                'complexity': context.get('task_complexity', 'unknown'),
+                'user_expertise': context.get('user_expertise', 'medium'),
+                'emotional_tone': context.get('emotional_tone', 'neutral')
             },
             'component_stats': {
                 k: {
@@ -321,11 +381,13 @@ class GenerativePromptEvolver:
             }
         }
         
-        debug_log("📝 Final prompt metadata", metadata)
-        debug_info(f"✅ Built adaptive prompt ({len(prompt)} chars)", {
+        debug_log("📝 Super-intelligent prompt metadata", metadata)
+        debug_success(f"✅ Built super-intelligent prompt ({len(prompt)} chars)", {
             "prompt_length": len(prompt),
             "sections": prompt.count('\n\n') + 1,
-            "enhancement_points": sum(1 for comp in selected_components.values() if comp.usage_count > 0)
+            "intelligence_enhancements": len([k for k in metadata['intelligence_features'] if metadata['intelligence_features'][k]]),
+            "context_depth": len(enhanced_context),
+            "memory_efficiency": f"{compression_stats.get('information_density', 0):.3f}"
         })
         
         return prompt, metadata
@@ -454,68 +516,81 @@ class GenerativePromptEvolver:
         
         return selected
     
-    def _construct_prompt_with_base_template(self, components: Dict[str, PromptComponent], 
-                                           context: Dict) -> str:
-        """Construct the final prompt using core_assistant.txt as foundation."""
+    def _construct_intelligent_prompt(self, components: Dict[str, PromptComponent], 
+                                     context: Dict) -> str:
+        """Construct the final super-intelligent prompt using dynamic intelligence features."""
         
-        # Load the base template (your existing core_assistant.txt)
+        # Load the base template with intelligent placeholders
         base_prompt = load_prompt("core_assistant", {
             "SHORT_TERM": context.get('short_term', ''),
-            "MEMORY_CONTEXT": context.get('memory_context', '')
+            "MEMORY_CONTEXT": context.get('compressed_memory_context', ''),
+            "MEMORY_GUIDELINES": self._get_memory_guidelines(components),
+            "PERSONALITY_ADAPTATION": context.get('personality_adaptation', 'Adapt naturally to user patterns.'),
+            "CONTEXT_AWARENESS": context.get('context_awareness', 'Maintain contextual awareness.'),
+            "OUTPUT_OPTIMIZATION": self._get_output_optimization(components, context)
         })
         
-        # Strategy: Enhance specific sections while keeping the core structure
-        sections = base_prompt.split('\n\n')
-        enhanced_sections = []
+        return base_prompt
+    
+    def _get_memory_guidelines(self, components: Dict[str, PromptComponent]) -> str:
+        """Generate dynamic memory guidelines based on learned components."""
+        if 'memory_guidelines' in components and components['memory_guidelines']:
+            return components['memory_guidelines'].content
+        else:
+            return """Only save memories you're confident about.
+If you're unsure about information, don't save it.
+Acknowledge mistakes immediately and learn from corrections."""
+    
+    def _get_output_optimization(self, components: Dict[str, PromptComponent], context: Dict) -> str:
+        """Generate output optimization instructions based on context and components."""
+        optimization_parts = []
         
-        for section in sections:
-            enhanced_section = section
-            
-            # Enhance personality section
-            if "personality" in section.lower() or "witty" in section.lower():
-                if 'personality' in components:
-                    enhanced_section += f"\n\nAdditional personality guidance: {components['personality'].content}"
-            
-            # Enhance memory guidelines section
-            elif "Memory Guidelines:" in section:
-                if 'memory_guidelines' in components:
-                    # Replace the existing memory guidelines
-                    lines = section.split('\n')
-                    header = lines[0]  # Keep "Memory Guidelines:"
-                    enhanced_section = f"{header}\n{components['memory_guidelines'].content}"
-            
-            # Enhance core principles if we have task instructions
-            elif "CORE PRINCIPLES:" in section:
-                if 'task_instructions' in components:
-                    enhanced_section += f"\n\nAdditional guidance: {components['task_instructions'].content}"
-            
-            enhanced_sections.append(enhanced_section)
+        # Add task instructions if available
+        if 'task_instructions' in components and components['task_instructions']:
+            optimization_parts.append(components['task_instructions'].content)
         
-        # Add any remaining components that didn't fit into existing sections
-        additional_sections = []
+        # Add context framers if available
+        if 'context_framers' in components and components['context_framers']:
+            optimization_parts.append(components['context_framers'].content)
         
-        if 'context_framers' in components:
-            additional_sections.append(f"Context Awareness: {components['context_framers'].content}")
+        # Add output formatters if available
+        if 'output_formatters' in components and components['output_formatters']:
+            optimization_parts.append(components['output_formatters'].content)
         
-        if 'output_formatters' in components:
-            additional_sections.append(f"Response Format: {components['output_formatters'].content}")
+        # Add token allocation awareness
+        token_allocation = context.get('token_allocation', {})
+        if token_allocation:
+            memory_pct = int(token_allocation.get('memory_context', 0) / sum(token_allocation.values()) * 100)
+            optimization_parts.append(f"Token allocation: {memory_pct}% for memory context, optimize accordingly.")
         
-        # Combine everything
-        final_prompt = '\n\n'.join(enhanced_sections)
-        if additional_sections:
-            final_prompt += '\n\n' + '\n\n'.join(additional_sections)
-        
-        return final_prompt
+        if optimization_parts:
+            return " ".join(optimization_parts)
+        else:
+            return "Optimize responses for clarity, accuracy, and user needs."
+    
+    def _construct_prompt_with_base_template(self, components: Dict[str, PromptComponent], 
+                                           context: Dict) -> str:
+        """Legacy method - use _construct_intelligent_prompt instead."""
+        return self._construct_intelligent_prompt(components, context)
     
     def record_feedback(self, prompt_metadata: Dict, quality_assessment: Dict, 
-                       user_feedback: Optional[str] = None):
-        """Record feedback to improve future component selection, prioritizing user ratings."""
+                       user_feedback: Optional[str] = None, user_input: str = "", 
+                       ai_response: str = ""):
+        """Record feedback to improve future component selection with intelligence learning."""
         
-        debug_info("🔄 Processing feedback for prompt components", {
+        debug_info("🚀 Processing intelligent feedback for prompt components", {
             "has_user_rating": quality_assessment.get('user_rating') is not None,
             "assessment_type": quality_assessment.get('assessment_type', 'unknown'),
-            "components_used": list(prompt_metadata.get('components', {}).keys())
+            "components_used": list(prompt_metadata.get('components', {}).keys()),
+            "intelligence_features": bool(prompt_metadata.get('intelligence_features')),
+            "personality_learning": bool(user_input and ai_response)
         })
+        
+        # Step 1: Update personality engine with interaction data
+        if user_input and ai_response:
+            self.personality_engine.analyze_user_interaction(
+                user_input, ai_response, user_feedback
+            )
         
         # Prioritize user ratings over heuristic scoring
         if quality_assessment.get('user_rating') is not None:
@@ -755,12 +830,15 @@ class EvolutionaryPromptBuilder:
         
         return prompt
     
-    def record_response_feedback(self, prompt_metadata: Dict, quality_assessment: Dict, user_feedback: str = None):
-        """Record AI-powered feedback on the generated prompt."""
+    def record_response_feedback(self, prompt_metadata: Dict, quality_assessment: Dict, 
+                                user_feedback: str = None, user_input: str = "", ai_response: str = ""):
+        """Record intelligent feedback on the generated prompt with personality learning."""
         self.evolver.record_feedback(
             prompt_metadata, 
             quality_assessment, 
-            user_feedback
+            user_feedback,
+            user_input,
+            ai_response
         )
     
     def get_evolution_stats(self) -> Dict:

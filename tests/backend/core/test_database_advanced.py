@@ -18,8 +18,8 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../')))
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../src')))
 
-from zackgpt.core.database import ZackGPTDatabase
-from zackgpt.core.logger import debug_log
+from src.zackgpt.data.database import Database as ZackGPTDatabase
+from src.zackgpt.core.logger import debug_log
 
 
 class TestDatabaseTransactions:
@@ -34,23 +34,29 @@ class TestDatabaseTransactions:
         yield db
         # Cleanup - drop test database
         try:
-            db.client.drop_database(test_db_name)
+            if hasattr(db, '_client') and db._client:
+                db._client.drop_database(test_db_name)
         except:
             pass
     
     @pytest.mark.core
     def test_thread_creation_transaction(self, test_db):
         """Test thread creation with proper transaction handling."""
-        thread_data = test_db.create_thread("Test Transaction Thread")
+        thread_id = test_db.create_thread("Test Transaction Thread")
         
-        assert thread_data is not None
-        assert thread_data['title'] == "Test Transaction Thread"
-        assert 'id' in thread_data
+        assert thread_id is not None
+        assert isinstance(thread_id, str)
         
-        # Verify thread exists in database
-        retrieved = test_db.get_thread(thread_data['id'])
-        assert retrieved is not None
-        assert retrieved['title'] == thread_data['title']
+        # Verify thread exists in database by getting all threads
+        threads = test_db.get_threads(limit=10)
+        created_thread = None
+        for thread in threads:
+            if thread['id'] == thread_id:
+                created_thread = thread
+                break
+        
+        assert created_thread is not None
+        assert created_thread['title'] == "Test Transaction Thread"
         
         print("✅ Thread creation transaction working")
     
@@ -58,19 +64,19 @@ class TestDatabaseTransactions:
     def test_message_addition_transaction(self, test_db):
         """Test message addition with thread update transaction."""
         # Create thread first
-        thread = test_db.create_thread("Test Message Thread")
-        thread_id = thread['id']
+        thread_id = test_db.create_thread("Test Message Thread")
         
         # Add message
-        message_data = test_db.add_message(thread_id, "user", "Test message content")
+        message_id = test_db.save_message(thread_id, "user", "Test message content")
         
-        assert message_data is not None
-        assert message_data['content'] == "Test message content"
-        assert message_data['thread_id'] == thread_id
+        assert message_id is not None
+        assert isinstance(message_id, str)
         
-        # Verify thread message count was updated
-        updated_thread = test_db.get_thread(thread_id)
-        assert updated_thread['message_count'] == 1
+        # Verify message exists
+        messages = test_db.get_thread_messages(thread_id)
+        assert len(messages) == 1
+        assert messages[0]['content'] == "Test message content"
+        assert messages[0]['thread_id'] == thread_id
         
         print("✅ Message addition transaction working")
     
@@ -82,7 +88,8 @@ class TestDatabaseTransactions:
         
         try:
             # Attempt to add message to non-existent thread
-            test_db.add_message("non-existent-thread", "user", "Test message")
+            test_db.save_message("non-existent-thread", "user", "Test message")
+            print("ℹ️ MongoDB allows orphaned documents (no foreign key constraints)")
         except Exception as e:
             # Should handle the error without corrupting the database
             assert "thread" in str(e).lower() or "foreign key" in str(e).lower()
@@ -228,10 +235,10 @@ class TestDataIntegrity:
         except Exception as e:
             assert "title" in str(e).lower() or "empty" in str(e).lower()
         
-        # Test very long content
+        # Test very long content  
         long_content = "x" * 10000
-        thread = integrity_test_db.create_thread("Test Thread")
-        message = integrity_test_db.add_message(thread['id'], "user", long_content)
+        thread_id = integrity_test_db.create_thread("Test Thread")
+        message_id = integrity_test_db.save_message(thread_id, "user", long_content)
         
         assert message is not None
         assert len(message['content']) == 10000

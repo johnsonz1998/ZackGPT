@@ -9,6 +9,7 @@ import sys
 import json
 import uuid
 import asyncio
+import concurrent.futures
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 from pathlib import Path
@@ -30,10 +31,31 @@ load_dotenv()
 os.environ["DEBUG_MODE"] = "True"
 
 # =============================
+#      THREAD POOL EXECUTOR
+# =============================
+
+# Create a thread pool executor for blocking operations
+thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=4)
+
+# =============================
 #         DATA MODELS
 # =============================
 
-# Thread and ChatMessage models are now imported from thread_manager
+class Thread(BaseModel):
+    """Thread data model for API responses."""
+    id: str
+    title: str
+    created_at: datetime
+    updated_at: datetime
+    message_count: Optional[int] = 0
+
+class ChatMessage(BaseModel):
+    """Chat message data model for API responses."""
+    id: str
+    thread_id: str
+    role: str  # "user" or "assistant"
+    content: str
+    timestamp: datetime
 
 class SendMessageRequest(BaseModel):
     content: str
@@ -109,9 +131,10 @@ class ConnectionManager:
         for connection in self.active_connections.values():
             await connection.send_text(message)
 
-# Import the new persistent managers
-from ..data.thread_manager import PersistentThreadManager, Thread, ChatMessage
-from ..data.memory_manager import PersistentMemoryManager
+# Import the managers
+from ..data.thread_manager import ThreadManager
+from ..data.memory_manager import MemoryManager
+from ..data.database import get_database
 
 # Import the memory graph API router
 from .memory_graph_api import router as memory_graph_router
@@ -149,8 +172,8 @@ app.include_router(memory_graph_router)
 
 # Global instances
 connection_manager = ConnectionManager()
-thread_manager = PersistentThreadManager()
-memory_manager = PersistentMemoryManager()
+thread_manager = ThreadManager()
+memory_manager = MemoryManager()
 
 # Assistant instance per thread (for conversation continuity)
 assistants: Dict[str, CoreAssistant] = {}
@@ -198,15 +221,20 @@ async def health_check():
 async def get_threads():
     """Get all conversation threads."""
     threads = thread_manager.get_all_threads()
-    # Sort by updated_at descending
-    threads.sort(key=lambda t: t.updated_at, reverse=True)
+    # Sort by updated_at descending (threads are already dictionaries)
+    threads.sort(key=lambda t: t.get("updated_at", ""), reverse=True)
     return threads
 
 @app.post("/threads", response_model=Thread)
 async def create_thread(request: CreateThreadRequest):
     """Create a new conversation thread."""
-    thread = thread_manager.create_thread(request.title)
-    return thread
+    thread_id = thread_manager.create_thread(request.title)
+    if thread_id:
+        # Get the full thread object
+        thread = thread_manager.get_thread(thread_id)
+        return thread
+    else:
+        raise HTTPException(status_code=500, detail="Failed to create thread")
 
 @app.get("/threads/{thread_id}", response_model=Thread)
 async def get_thread(thread_id: str):
@@ -250,20 +278,38 @@ async def send_message(thread_id: str, request: SendMessageRequest):
         # Add user message to database
         user_message = thread_manager.add_user_message(thread_id, request.content)
         
-        # Get AI response with optional web search
+        # Get AI response with optional web search (run in thread pool to avoid blocking)
         assistant = get_assistant(thread_id)
-        if request.force_web_search:
-            # Force web search by modifying the input to trigger search
-            search_input = f"[WEB_SEARCH_FORCED] {request.content}"
-            ai_response = assistant.process_input(search_input)
-        else:
-            ai_response = assistant.process_input(request.content)
+        loop = asyncio.get_event_loop()
+        
+        try:
+            if request.force_web_search:
+                # Force web search by modifying the input to trigger search
+                search_input = f"[WEB_SEARCH_FORCED] {request.content}"
+                ai_response = await asyncio.wait_for(
+                    loop.run_in_executor(
+                        thread_pool, assistant.process_input, search_input
+                    ),
+                    timeout=60.0  # 60 second timeout
+                )
+            else:
+                ai_response = await asyncio.wait_for(
+                    loop.run_in_executor(
+                        thread_pool, assistant.process_input, request.content
+                    ),
+                    timeout=60.0  # 60 second timeout
+                )
+        except asyncio.TimeoutError:
+            debug_error("AI processing timeout", {"thread_id": thread_id, "content": request.content[:50]})
+            raise HTTPException(status_code=504, detail="AI processing timeout - please try again")
+        except Exception as processing_error:
+            debug_error("AI processing error", {"error": str(processing_error), "thread_id": thread_id})
+            raise HTTPException(status_code=500, detail=f"AI processing failed: {str(processing_error)}")
         
         # Add assistant message to database
         assistant_message = thread_manager.add_assistant_message(thread_id, ai_response)
         
-        # Save interaction to memory if appropriate
-        memory_manager.save_interaction(request.content, ai_response)
+        # Memory saving is handled inside assistant.process_input() to avoid duplicates
         
         return assistant_message
         
@@ -408,22 +454,14 @@ async def update_api_keys(api_keys: Dict[str, str]):
 async def get_memories():
     """Get all memories for the memory graph visualization."""
     try:
-        # Use the persistent memory manager to get all memories
-        memories = memory_manager.db.memories.find().sort("timestamp", -1)
+        if not memory_manager.db:
+            return []
         
-        result = []
-        for memory in memories:
-            result.append({
-                "id": str(memory["_id"]),
-                "question": memory["question"],
-                "answer": memory["answer"],
-                "tags": memory.get("tags", []),
-                "importance": memory.get("importance", "medium"),
-                "timestamp": memory["timestamp"].isoformat() if hasattr(memory.get("timestamp"), 'isoformat') else str(memory.get("timestamp")) if memory.get("timestamp") else None
-            })
+        # Use the database method to get all memories
+        memories = memory_manager.db.get_all_memories(limit=100)
         
-        debug_info(f"Retrieved {len(result)} memories for graph visualization")
-        return result
+        debug_info(f"Retrieved {len(memories)} memories for graph visualization")
+        return memories
     except Exception as e:
         debug_error("Failed to get memories", e)
         raise HTTPException(status_code=500, detail=f"Failed to get memories: {str(e)}")
@@ -432,16 +470,11 @@ async def get_memories():
 async def update_memory(memory_id: str, updates: Dict[str, Any]):
     """Update an existing memory."""
     try:
-        from bson import ObjectId
-        
-        # Validate memory_id format
-        try:
-            obj_id = ObjectId(memory_id)
-        except Exception:
-            raise HTTPException(status_code=400, detail="Invalid memory ID format")
+        if not memory_manager.db:
+            raise HTTPException(status_code=503, detail="Database not available")
         
         # Find the existing memory
-        existing_memory = memory_manager.db.memories.find_one({"_id": obj_id})
+        existing_memory = memory_manager.db.get_memory_by_id(memory_id)
         if not existing_memory:
             raise HTTPException(status_code=404, detail="Memory not found")
         
@@ -456,26 +489,23 @@ async def update_memory(memory_id: str, updates: Dict[str, Any]):
         if "importance" in updates and updates["importance"] in ["high", "medium", "low"]:
             update_data["importance"] = updates["importance"]
         
-        # Update the memory
-        result = memory_manager.db.memories.update_one(
-            {"_id": obj_id},
-            {"$set": update_data}
-        )
+        # Update the memory using database method
+        success = memory_manager.db.update_memory(memory_id, update_data)
         
-        if result.modified_count == 0:
+        if not success:
             raise HTTPException(status_code=400, detail="No changes made to memory")
         
         # Return updated memory
-        updated_memory = memory_manager.db.memories.find_one({"_id": obj_id})
+        updated_memory = memory_manager.db.get_memory_by_id(memory_id)
         debug_info(f"Updated memory {memory_id}")
         
         return {
-            "id": str(updated_memory["_id"]),
+            "id": updated_memory["_id"],
             "question": updated_memory["question"],
             "answer": updated_memory["answer"],
             "tags": updated_memory.get("tags", []),
             "importance": updated_memory.get("importance", "medium"),
-            "timestamp": updated_memory["timestamp"].isoformat() if hasattr(updated_memory.get("timestamp"), 'isoformat') else str(updated_memory.get("timestamp")) if updated_memory.get("timestamp") else None
+            "timestamp": updated_memory.get("timestamp")
         }
         
     except HTTPException:
@@ -488,8 +518,11 @@ async def update_memory(memory_id: str, updates: Dict[str, Any]):
 async def delete_memory(memory_id: str):
     """Delete a memory."""
     try:
-        # Check if memory exists (using UUID string directly)
-        existing_memory = memory_manager.db.memories.find_one({"_id": memory_id})
+        if not memory_manager.db:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        # Check if memory exists
+        existing_memory = memory_manager.db.get_memory_by_id(memory_id)
         if not existing_memory:
             raise HTTPException(status_code=404, detail="Memory not found")
         
@@ -522,7 +555,16 @@ async def reset_config():
 
 @app.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
-    """WebSocket endpoint for real-time chat."""
+    """
+    WebSocket endpoint for real-time chat.
+    
+    IMPORTANT: This endpoint uses asyncio.run_in_executor() to run blocking AI processing
+    operations (like OpenAI API calls) in a separate thread pool. This prevents the
+    async event loop from being blocked, which was causing hanging responses.
+    
+    Without this fix, calling assistant.process_input() directly would block the entire
+    WebSocket connection and cause the frontend to hang waiting for a response.
+    """
     await connection_manager.connect(websocket, client_id)
     
     try:
@@ -552,7 +594,13 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                     # Send user message confirmation
                     await websocket.send_text(json.dumps({
                         "type": "message",
-                        "data": user_message.model_dump(mode='json')
+                        "data": {
+                            "id": user_message["id"],
+                            "thread_id": user_message["thread_id"],
+                            "role": user_message["role"],
+                            "content": user_message["content"],
+                            "timestamp": user_message["timestamp"].isoformat()
+                        }
                     }))
                     
                     # Send typing indicator
@@ -561,22 +609,50 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                         "typing": True
                     }))
                     
-                    # Get AI response with optional web search
+                    # Get AI response with optional web search (run in thread pool to avoid blocking)
                     assistant = get_assistant(thread_id)
-                    if force_web_search:
-                        # Force web search by modifying the input to trigger search
-                        search_input = f"[WEB_SEARCH_FORCED] {content}"
-                        ai_response = assistant.process_input(search_input)
-                    else:
-                        ai_response = assistant.process_input(content)
+                    loop = asyncio.get_event_loop()
+                    
+                    try:
+                        if force_web_search:
+                            # Force web search by modifying the input to trigger search
+                            search_input = f"[WEB_SEARCH_FORCED] {content}"
+                            ai_response = await asyncio.wait_for(
+                                loop.run_in_executor(
+                                    thread_pool, assistant.process_input, search_input
+                                ),
+                                timeout=60.0  # 60 second timeout
+                            )
+                        else:
+                            ai_response = await asyncio.wait_for(
+                                loop.run_in_executor(
+                                    thread_pool, assistant.process_input, content
+                                ),
+                                timeout=60.0  # 60 second timeout
+                            )
+                    except asyncio.TimeoutError:
+                        debug_error("AI processing timeout", {"thread_id": thread_id, "content": content[:50]})
+                        ai_response = "I apologize, but my response is taking longer than expected. This might be due to a slow connection or complex processing. Please try again."
+                        
+                        # Send timeout notification
+                        await websocket.send_text(json.dumps({
+                            "type": "typing",
+                            "typing": False
+                        }))
+                        await websocket.send_text(json.dumps({
+                            "type": "error",
+                            "message": "Response timeout - please try again"
+                        }))
+                        continue
+                    except Exception as processing_error:
+                        debug_error("AI processing error", {"error": str(processing_error), "thread_id": thread_id})
+                        ai_response = f"I apologize, but I encountered an error while processing your request: {str(processing_error)}"
                     
                     # Add assistant message to database
                     assistant_message = thread_manager.add_assistant_message(thread_id, ai_response)
                     
-                    # Save interaction to memory and get notification
-                    memory_notification = memory_manager.save_interaction_with_notification(
-                        content, ai_response, agent="core_assistant", thread_id=thread_id
-                    )
+                    # Memory saving is handled inside assistant.process_input() to avoid duplicates
+                    memory_notification = None  # No longer sending memory notifications for every chat
                     
                     # Send typing indicator off
                     await websocket.send_text(json.dumps({
@@ -587,7 +663,13 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                     # Send assistant response
                     await websocket.send_text(json.dumps({
                         "type": "message",
-                        "data": assistant_message.model_dump(mode='json')
+                        "data": {
+                            "id": assistant_message["id"],
+                            "thread_id": assistant_message["thread_id"],
+                            "role": assistant_message["role"],
+                            "content": assistant_message["content"],
+                            "timestamp": assistant_message["timestamp"].isoformat()
+                        }
                     }))
                     
                     # Send memory notification if memory was created
@@ -610,7 +692,13 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                     messages = thread_manager.get_messages(thread_id)
                     await websocket.send_text(json.dumps({
                         "type": "messages",
-                        "data": [msg.model_dump(mode='json') for msg in messages]
+                        "data": [{
+                            "id": msg["id"],
+                            "thread_id": msg["thread_id"],
+                            "role": msg["role"],
+                            "content": msg["content"],
+                            "timestamp": msg["timestamp"].isoformat() if hasattr(msg["timestamp"], 'isoformat') else str(msg["timestamp"])
+                        } for msg in messages]
                     }))
                     
     except WebSocketDisconnect:
@@ -640,6 +728,9 @@ async def startup_event():
 async def shutdown_event():
     """Clean up resources on shutdown."""
     debug_info("ZackGPT Web API shutting down")
+    
+    # Shutdown thread pool executor
+    thread_pool.shutdown(wait=True)
 
 # =============================
 #           MAIN RUNNER

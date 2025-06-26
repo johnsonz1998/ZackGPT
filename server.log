@@ -1,0 +1,29 @@
+INFO:     Will watch for changes in these directories: ['/home/zack/ZackGPT']
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [419485] using WatchFiles
+INFO:     Started server process [419487]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+Debug: API Key length: 164
+Debug: API Key prefix: sk-proj-...
+Debug: Checking for proxy settings...
+HTTP_PROXY: None
+HTTPS_PROXY: None
+NO_PROXY: None
+✅ OpenAI client initialized successfully
+INFO:     127.0.0.1:46248 - "GET /memories HTTP/1.1" 200 OK
+INFO:     ('127.0.0.1', 46250) - "WebSocket /ws/f1a84585-2297-43d3-9498-380ac8dc6f37" [accepted]
+INFO:     connection open
+INFO:     ('127.0.0.1', 46252) - "WebSocket /ws/f1a84585-2297-43d3-9498-380ac8dc6f37" [accepted]
+INFO:     connection open
+INFO:     127.0.0.1:46254 - "POST /threads HTTP/1.1" 200 OK
+✅ OpenAI client initialized successfully
+✅ OpenAI client initialized successfully
+INFO:     127.0.0.1:46256 - "GET /health HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     connection closed
+INFO:     connection closed
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [419487]
+INFO:     Stopping reloader process [419485]

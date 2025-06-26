@@ -9,7 +9,8 @@ from .logger import debug_log, debug_info, debug_error, debug_success
 from config import config
 # Removed deprecated prompt_utils import - using EvolutionaryPromptBuilder instead
 import tiktoken
-from .prompt_builder import EvolutionaryPromptBuilder
+# Lazy imports to speed up module loading
+# from .prompt_builder import EvolutionaryPromptBuilder  # Import when needed
 from ..tools.web_search import search_web, get_webpage_content, WEB_SEARCH_ENABLED
 
 class ConversationManager:
@@ -71,11 +72,17 @@ class ConversationManager:
 class CoreAssistant:
     def __init__(self):
         """Initialize the core assistant with OpenAI client and memory database."""
-        self.client = OpenAI(api_key=config.OPENAI_API_KEY)
+        try:
+            # Use the robust client creation from query_utils
+            from .query_utils import create_openai_client
+            self.client = create_openai_client()
+        except Exception as e:
+            debug_error(f"Failed to initialize OpenAI client: {e}")
+            self.client = None
         self.model = config.LLM_MODEL
         self._memory_db = None
         self.conversation = ConversationManager()
-        self.prompt_builder = EvolutionaryPromptBuilder()
+        self._prompt_builder = None  # Lazy initialization
         
     @property
     def memory_db(self):
@@ -83,6 +90,14 @@ class CoreAssistant:
         if self._memory_db is None:
             self._memory_db = get_database()
         return self._memory_db
+    
+    @property
+    def prompt_builder(self):
+        """Lazy load prompt builder to speed up imports."""
+        if self._prompt_builder is None:
+            from .prompt_builder import EvolutionaryPromptBuilder
+            self._prompt_builder = EvolutionaryPromptBuilder()
+        return self._prompt_builder
         
     # Removed deprecated prompt property - using EvolutionaryPromptBuilder instead
         
@@ -114,13 +129,18 @@ class CoreAssistant:
                 if msg["role"] in ("user", "assistant"):
                     short_term += f"{msg['role'].capitalize()}: {msg['content']}\n"
             
-            # Use evolutionary prompt builder with conversation context
+            # Use enhanced prompt builder with intelligence features
             conversation_context = {
                 'conversation_length': len(self.conversation.messages),
                 'recent_errors': self._count_recent_errors(),
                 'user_expertise': self._assess_user_expertise(),
                 'conversation_type': self._classify_conversation_type(user_input),
-                'task_complexity': 'complex' if len(user_input) > 100 else 'simple'
+                'task_complexity': 'complex' if len(user_input) > 100 else 'simple',
+                'current_query': user_input,
+                'conversation_history': [{"content": msg["content"], "role": msg["role"]} 
+                                       for msg in self.conversation.messages[-10:]],
+                'memories': memories,
+                'max_tokens': 4000
             }
             
             system_prompt = self.prompt_builder.build_system_prompt(
@@ -210,12 +230,22 @@ class CoreAssistant:
         time_indicators = ["today", "now", "current", "latest", "recent", "new", "breaking"]
         news_keywords = ["news", "happening", "events", "updates", "reports"]
         
-        # Specific information requests
+        # Specific information requests (EXCLUDING conversational questions)
         search_triggers = [
-            "search for", "look up", "find information", "tell me about",
-            "what is", "who is", "when did", "where is", "how much",
+            "search for", "look up", "find information about",
             "price of", "cost of", "weather", "stock", "exchange rate"
         ]
+        
+        # Conversational questions that should NOT trigger web search
+        conversational_exclusions = [
+            "what is your name", "who are you", "tell me about yourself",
+            "what are you", "how are you", "what can you do"
+        ]
+        
+        # Check for conversational exclusions first
+        for exclusion in conversational_exclusions:
+            if exclusion in user_lower:
+                return False
         
         # Real-time data requests
         realtime_keywords = ["weather", "temperature", "forecast", "stock price", 
@@ -290,6 +320,7 @@ class CoreAssistant:
     def _assess_response_quality_ai(self, response: str, user_input: str, conversation_context: Dict) -> Dict:
         """AI-powered response quality assessment."""
         try:
+            # Lazy import to avoid slowing down module loading
             from .prompt_enhancer import HybridPromptEnhancer
             ai_enhancer = HybridPromptEnhancer()
             return ai_enhancer.assess_response_quality(response, user_input, conversation_context)
@@ -397,17 +428,53 @@ class CoreAssistant:
         
     def _extract_tags(self, question: str, answer: str) -> list:
         """Extract relevant tags from the interaction."""
-        # TODO: Implement more sophisticated tag extraction
-        # For now, return basic tags based on content
         tags = []
+        q_lower = question.lower()
+        a_lower = answer.lower()
         
-        # Add topic-based tags
-        if any(word in question.lower() for word in ["name", "called", "who"]):
+        # Identity-related tags
+        if any(word in q_lower for word in ["name", "called", "who am i", "i am", "my name"]):
             tags.append("identity")
-        if any(word in question.lower() for word in ["like", "prefer", "favorite"]):
+        
+        # Family and relationships
+        if any(word in q_lower for word in ["family", "mother", "father", "parent", "sister", "brother", "wife", "husband", "girlfriend", "boyfriend", "friend", "best friend", "child", "son", "daughter"]):
+            tags.append("family")
+        
+        # Work and career
+        if any(word in q_lower for word in ["work", "job", "career", "company", "office", "boss", "colleague", "employee", "profession"]):
+            tags.append("work")
+        
+        # Preferences and likes
+        if any(word in q_lower for word in ["like", "prefer", "favorite", "love", "enjoy", "hate", "dislike"]):
             tags.append("preferences")
-        if any(word in question.lower() for word in ["feel", "think", "opinion"]):
+        
+        # Opinions and thoughts
+        if any(word in q_lower for word in ["feel", "think", "opinion", "believe", "consider"]):
             tags.append("opinion")
+        
+        # Memories and facts
+        if any(word in q_lower for word in ["remember", "recall", "forgot", "memory"]):
+            tags.append("memory")
+        
+        # Hobbies and activities
+        if any(word in q_lower for word in ["hobby", "sport", "game", "play", "music", "book", "movie", "travel"]):
+            tags.append("hobbies")
+        
+        # Health and medical
+        if any(word in q_lower for word in ["health", "doctor", "medicine", "sick", "illness", "medical", "hospital"]):
+            tags.append("health")
+        
+        # Education and learning
+        if any(word in q_lower for word in ["school", "university", "college", "study", "learn", "education", "degree"]):
+            tags.append("education")
+        
+        # Location and places
+        if any(word in q_lower for word in ["live", "address", "city", "country", "hometown", "location", "from"]):
+            tags.append("location")
+        
+        # Default tag if no specific category found
+        if not tags:
+            tags.append("general")
             
         return tags
         
@@ -451,6 +518,9 @@ class CoreAssistant:
                 debug_log("System prompt for training", context[0]["content"])
             
             # Get response from OpenAI
+            if self.client is None:
+                return "I apologize, but I cannot connect to the AI service right now. Please check your OpenAI API configuration."
+            
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=context,
@@ -462,7 +532,7 @@ class CoreAssistant:
             # Add assistant's response to conversation
             self.conversation.add_message("assistant", answer)
             
-            # Record AI-powered feedback for prompt evolution
+            # Record AI-powered feedback for prompt evolution with intelligence learning
             conversation_context = {
                 'conversation_length': len(self.conversation.messages),
                 'recent_errors': self._count_recent_errors(),
@@ -474,7 +544,10 @@ class CoreAssistant:
             quality_assessment = self._assess_response_quality_ai(answer, user_input, conversation_context)
             self.prompt_builder.record_response_feedback(
                 self.prompt_builder.current_prompt_metadata, 
-                quality_assessment
+                quality_assessment,
+                user_feedback=None,  # Will be provided later if user gives explicit feedback
+                user_input=user_input,
+                ai_response=answer
             )
             
             debug_info("Generated response", {
@@ -492,80 +565,3 @@ class CoreAssistant:
         except Exception as e:
             debug_error("Failed to process input", e)
             return "I apologize, but I encountered an error processing your request."
-
-def summarize_memory_for_context(mem_entries, max_items=5):
-    return "\n".join(
-        f"- {entry['answer']} (tags: {', '.join(entry.get('tags', []))})"
-        for entry in mem_entries[:max_items]
-    )
-
-def process_input(user_input: str, agent: str = "core_assistant") -> str:
-    """Process user input and return the assistant's response."""
-    try:
-        # Check for memory correction
-        if user_input.lower().startswith("correction:"):
-            parts = user_input[len("correction:"):].strip().split("|")
-            if len(parts) >= 2:
-                memory_id = parts[0].strip()
-                correction = parts[1].strip()
-                if update_memory(memory_id, {"answer": correction}):
-                    return f"Memory updated: {correction}"
-                else:
-                    return "Failed to update memory"
-        
-        context = build_context(user_input, agent)
-        
-        debug_info("Sending request to OpenAI", {
-            "model": config.OPENAI_MODEL,
-            "context_length": len(context)
-        })
-        
-        response = client.chat.completions.create(
-            model=config.OPENAI_MODEL,
-            messages=context,
-            temperature=0.7,
-            max_tokens=1000
-        )
-        
-        answer = response.choices[0].message.content.strip()
-        
-        # Save to memory if appropriate
-        maybe_save_memory(user_input, answer, agent)
-        
-        return answer
-        
-    except Exception as e:
-        debug_error("Error processing input", e)
-        return "I encountered an error processing your request. Please try again."
-
-def generate_response(user_input: str, agent: str = "core_assistant") -> str:
-    messages = build_context(user_input, agent)
-    response = client.chat.completions.create(
-        model="gpt-4-turbo",
-        messages=messages,
-        temperature=config.LLM_TEMPERATURE,
-        stream=False
-    )
-    return response.choices[0].message.content.strip()
-
-def get_response(*, user_input: str, agent: str = "core_assistant") -> str:
-    content = generate_response(user_input, agent)
-    if config.DEBUG_MODE:
-        print("\n\U0001f9e0 Full GPT response:\n", content)
-
-    conversation_history.append({"role": "user", "content": user_input})
-    conversation_history.append({"role": "assistant", "content": content})
-
-    maybe_save_memory(user_input, content)
-
-    return content
-
-def run_assistant(*, user_input: str, agent: str = "core_assistant"):
-    if config.DEBUG_MODE:
-        print("DEBUG_MODE is", config.DEBUG_MODE)
-    if not user_input.strip():
-        print("⚠️ Empty transcription. Ignoring.")
-        return
-
-    content = get_response(user_input=user_input, agent=agent)
-    print("\n💬 Final assistant reply:", content)
