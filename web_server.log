@@ -1,0 +1,14 @@
+nohup: ignoring input
+INFO:     Started server process [847622]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     ('127.0.0.1', 57642) - "WebSocket /ws/test-client" [accepted]
+INFO:     connection open
+INFO:     ('127.0.0.1', 57644) - "WebSocket /ws/0397ee35-8773-4f4c-aff9-656f950e6e2d" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     connection closed
+INFO:     ('127.0.0.1', 57646) - "WebSocket /ws/0397ee35-8773-4f4c-aff9-656f950e6e2d" [accepted]
+INFO:     connection open
+INFO:     connection closed

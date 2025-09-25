@@ -1,11 +1,13 @@
 import json
+import os
 import re
 import uuid
+from datetime import datetime
 from pathlib import Path
-from typing import Dict
+from typing import Dict, List
 from openai import OpenAI
 from ..data.database import get_database
-from .logger import debug_log, debug_info, debug_error, debug_success
+from ..utils.logger import debug_log, debug_info, debug_error, debug_success
 from config import config
 # Removed deprecated prompt_utils import - using EvolutionaryPromptBuilder instead
 import tiktoken
@@ -15,10 +17,17 @@ from ..tools.web_search import search_web, get_webpage_content, WEB_SEARCH_ENABL
 
 class ConversationManager:
     def __init__(self, max_tokens=4000, max_messages=10):
+        # Apply lightweight mode limits if enabled
+        lightweight_mode = os.getenv("ZACKGPT_LIGHTWEIGHT", "false").lower() == "true"
+        if lightweight_mode:
+            max_tokens = int(os.getenv("MAX_TOKENS", "1000"))
+            max_messages = int(os.getenv("MAX_CONVERSATION_HISTORY", "3"))
+            
         self.max_tokens = max_tokens
         self.max_messages = max_messages
         self.messages = []
         self.encoding = tiktoken.encoding_for_model("gpt-4")
+        self.lightweight_mode = lightweight_mode
         
     def add_message(self, role: str, content: str):
         """Add a message to the conversation history."""
@@ -95,80 +104,103 @@ class CoreAssistant:
     def prompt_builder(self):
         """Lazy load prompt builder to speed up imports."""
         if self._prompt_builder is None:
-            from .prompt_builder import EvolutionaryPromptBuilder
-            self._prompt_builder = EvolutionaryPromptBuilder()
+            from .prompt_builder import PromptBuilder
+            self._prompt_builder = PromptBuilder()
         return self._prompt_builder
         
     # Removed deprecated prompt property - using EvolutionaryPromptBuilder instead
         
     def build_context(self, user_input: str, agent: str = "core_assistant") -> list:
-        """Build context from relevant memories and conversation history."""
+        """Build context using dynamic memory retrieval system."""
         try:
-            # Get relevant memories
-            memories = self.memory_db.query_memories(
-                query=user_input,
-                limit=3,  # Reduced from 5 to save tokens
-                agent=agent,
-                importance="high"  # Only get high-importance memories
-            )
+            # STEP 1: LOCAL INTELLIGENCE ROUTING - Get base memory level
+            from .local_router import route_query
             
-            # Build memory context
-            memory_context = ""
-            if memories:
-                memory_context = "Relevant memories:\n"
-                for memory in memories:
-                    memory_context += f"Q: {memory['question']}\n"
-                    memory_context += f"A: {memory['answer']}\n"
-                    if memory.get('tags'):
-                        memory_context += f"Tags: {', '.join(memory['tags'])}\n"
-                    memory_context += "---\n"
+            # Get conversation context for the router
+            conversation_context = [{"content": msg["content"], "role": msg["role"]} 
+                                  for msg in self.conversation.messages[-5:]]
             
-            # Build short-term context (recent conversation)
-            short_term = ""
-            for msg in self.conversation.messages[-6:]:
-                if msg["role"] in ("user", "assistant"):
-                    short_term += f"{msg['role'].capitalize()}: {msg['content']}\n"
+            # Make routing decision in <1ms
+            routing_decision = route_query(user_input, conversation_context)
             
-            # Use enhanced prompt builder with intelligence features
-            conversation_context = {
-                'conversation_length': len(self.conversation.messages),
-                'recent_errors': self._count_recent_errors(),
-                'user_expertise': self._assess_user_expertise(),
-                'conversation_type': self._classify_conversation_type(user_input),
-                'task_complexity': 'complex' if len(user_input) > 100 else 'simple',
-                'current_query': user_input,
-                'conversation_history': [{"content": msg["content"], "role": msg["role"]} 
-                                       for msg in self.conversation.messages[-10:]],
-                'memories': memories,
-                'max_tokens': 4000
-            }
-            
-            system_prompt = self.prompt_builder.build_system_prompt(
-                short_term, 
-                memory_context,
-                conversation_context
-            )
-            
-            # Add system message to conversation
-            if not self.conversation.messages or self.conversation.messages[0]["role"] != "system":
-                self.conversation.add_message("system", system_prompt)
-            else:
-                self.conversation.messages[0]["content"] = system_prompt
-            
-            # Add user message
-            self.conversation.add_message("user", user_input)
-            
-            debug_info("Built context", {
-                "query": user_input[:50] + "...",
-                "memories_found": len(memories),
-                "conversation_length": len(self.conversation.messages)
+            debug_info(f"Local router decision ({routing_decision.processing_time_ms:.1f}ms)", {
+                "memory_level": routing_decision.memory_level,
+                "reasoning": routing_decision.reasoning,
+                "confidence": f"{routing_decision.confidence:.2f}"
             })
             
-            return self.conversation.get_context()
+            # STEP 2: SIMPLE MEMORY PLANNING
+            from .dynamic_memory_engine import create_memory_plan
             
+            # Create simple memory plan
+            memory_plan = create_memory_plan(
+                user_input=user_input,
+                memory_level=routing_decision.memory_level
+            )
+            
+            debug_info(f"Simple memory plan", {
+                "recent": memory_plan.recent_memories,
+                "semantic": memory_plan.semantic_memories,
+                "strategies": memory_plan.search_strategies
+            })
+            
+            # STEP 3: EXECUTE SIMPLE RETRIEVAL PLAN
+            return self._build_dynamic_context(user_input, agent, memory_plan)
+                
         except Exception as e:
-            debug_error("Failed to build context", e)
+            debug_error("Failed to build dynamic context", e)
+            # Fallback to simple context on error
             return [{"role": "user", "content": user_input}]
+    
+
+            
+    def _build_simple_context(self, user_input: str) -> list:
+        """Build a simplified context for very short queries."""
+        short_term = ""
+        for msg in self.conversation.messages[-3:]: # Use fewer messages for simple queries
+            if msg["role"] in ("user", "assistant"):
+                short_term += f"{msg['role'].capitalize()}: {msg['content']}\n"
+        
+        # For very simple queries, we might not have a full memory context
+        # or it might be too complex to process.
+        # We'll just use the short-term context and a placeholder for memories.
+        memory_context = "No detailed memory context available for this simple query."
+        
+        conversation_context = {
+            'conversation_length': len(self.conversation.messages),
+            'recent_errors': self._count_recent_errors(),
+            'user_expertise': self._assess_user_expertise(),
+            'conversation_type': self._classify_conversation_type(user_input),
+            'task_complexity': 'simple',
+            'current_query': user_input,
+            'conversation_history': [{"content": msg["content"], "role": msg["role"]} 
+                                   for msg in self.conversation.messages[-5:]],
+            'memories': [], # No detailed memories for simple queries
+            'max_tokens': 4000,
+            'compressed_memory_context': memory_context
+        }
+        
+        system_prompt = self.prompt_builder.build_system_prompt(
+            short_term, 
+            memory_context,
+            conversation_context
+        )
+        
+        # Add system message to conversation
+        if not self.conversation.messages or self.conversation.messages[0]["role"] != "system":
+            self.conversation.add_message("system", system_prompt)
+        else:
+            self.conversation.messages[0]["content"] = system_prompt
+        
+        # Add user message
+        self.conversation.add_message("user", user_input)
+        
+        debug_info("Built fast context for simple query", {
+            "query": user_input[:50] + "...",
+            "conversation_length": len(self.conversation.messages)
+        })
+        
+        return self.conversation.get_context()
     
     def _count_recent_errors(self) -> int:
         """Count recent errors/uncertainty in conversation."""
@@ -320,10 +352,9 @@ class CoreAssistant:
     def _assess_response_quality_ai(self, response: str, user_input: str, conversation_context: Dict) -> Dict:
         """AI-powered response quality assessment."""
         try:
-            # Lazy import to avoid slowing down module loading
-            from .prompt_enhancer import HybridPromptEnhancer
-            ai_enhancer = HybridPromptEnhancer()
-            return ai_enhancer.assess_response_quality(response, user_input, conversation_context)
+            from .prompt_enhancer import SimplePromptScorer
+            scorer = SimplePromptScorer()
+            return scorer.assess_response(response, user_input, conversation_context)
         except Exception as e:
             debug_error("AI assessment failed, using fallback", e)
             return self._assess_response_quality_fallback(response, user_input)
@@ -362,121 +393,7 @@ class CoreAssistant:
     
     def get_evolution_stats(self) -> dict:
         """Get statistics about prompt evolution for debugging."""
-        return self.prompt_builder.get_evolution_stats()
-        
-    def should_save_memory(self, question: str, answer: str) -> bool:
-        """
-        Only save if the user explicitly asks to remember, or provides a fact (e.g., 'my X is Y').
-        """
-        q_lower = question.lower()
-        # Save if user says 'remember'
-        if "remember" in q_lower:
-            debug_log("Memory save triggered by 'remember' keyword.", {"question": question})
-            return True
-        # Save if user provides a fact pattern: 'my X is Y'
-        if re.match(r"my .+ is .+", q_lower):
-            debug_log("Memory save triggered by fact pattern.", {"question": question})
-            return True
-        debug_log("Memory NOT saved: no explicit remember or fact pattern.", {"question": question})
-        return False
-
-    def extract_fact(self, question: str) -> dict:
-        """Extract a simple fact from the user's statement."""
-        match = re.match(r"my ([\w\s]+?) is ([\w\s]+)", question.lower())
-        if match:
-            key = match.group(1).strip().replace(" ", "_")
-            value = match.group(2).strip().capitalize()
-            return {"relation": key, "value": value}
-        return None
-
-    def maybe_save_memory(self, question: str, answer: str, agent: str = "core_assistant") -> None:
-        debug_info("Evaluating memory save", {
-            "question": question,
-            "answer": answer,
-            "agent": agent
-        })
-        if not self.should_save_memory(question, answer):
-            debug_info("Skipping memory save - interaction doesn't meet criteria", {
-                "question": question,
-                "answer": answer
-            })
-            return
-        try:
-            # Try to extract a fact
-            fact = self.extract_fact(question)
-            tags = self._extract_tags(question, answer)
-            debug_info("Extracted tags", {"tags": tags, "fact": fact})
-            # Save to database (optionally, use fact structure)
-            memory_id = self.memory_db.save_memory(
-                question=question,
-                answer=answer,
-                agent=agent,
-                importance="high",
-                tags=tags
-            )
-            if memory_id:
-                debug_success("Saved interaction to memory", {
-                    "id": memory_id,
-                    "question": question[:50] + "...",
-                    "tags": tags,
-                    "fact": fact
-                })
-            else:
-                debug_error("Failed to save memory - no ID returned")
-        except Exception as e:
-            debug_error("Failed to save memory", e)
-        
-    def _extract_tags(self, question: str, answer: str) -> list:
-        """Extract relevant tags from the interaction."""
-        tags = []
-        q_lower = question.lower()
-        a_lower = answer.lower()
-        
-        # Identity-related tags
-        if any(word in q_lower for word in ["name", "called", "who am i", "i am", "my name"]):
-            tags.append("identity")
-        
-        # Family and relationships
-        if any(word in q_lower for word in ["family", "mother", "father", "parent", "sister", "brother", "wife", "husband", "girlfriend", "boyfriend", "friend", "best friend", "child", "son", "daughter"]):
-            tags.append("family")
-        
-        # Work and career
-        if any(word in q_lower for word in ["work", "job", "career", "company", "office", "boss", "colleague", "employee", "profession"]):
-            tags.append("work")
-        
-        # Preferences and likes
-        if any(word in q_lower for word in ["like", "prefer", "favorite", "love", "enjoy", "hate", "dislike"]):
-            tags.append("preferences")
-        
-        # Opinions and thoughts
-        if any(word in q_lower for word in ["feel", "think", "opinion", "believe", "consider"]):
-            tags.append("opinion")
-        
-        # Memories and facts
-        if any(word in q_lower for word in ["remember", "recall", "forgot", "memory"]):
-            tags.append("memory")
-        
-        # Hobbies and activities
-        if any(word in q_lower for word in ["hobby", "sport", "game", "play", "music", "book", "movie", "travel"]):
-            tags.append("hobbies")
-        
-        # Health and medical
-        if any(word in q_lower for word in ["health", "doctor", "medicine", "sick", "illness", "medical", "hospital"]):
-            tags.append("health")
-        
-        # Education and learning
-        if any(word in q_lower for word in ["school", "university", "college", "study", "learn", "education", "degree"]):
-            tags.append("education")
-        
-        # Location and places
-        if any(word in q_lower for word in ["live", "address", "city", "country", "hometown", "location", "from"]):
-            tags.append("location")
-        
-        # Default tag if no specific category found
-        if not tags:
-            tags.append("general")
-            
-        return tags
+        return {"note": "Evolution stats removed - simplified system"}
         
     def process_input(self, user_input: str, short_term_context: str = "") -> str:
         """Process user input and generate a response."""
@@ -532,36 +449,350 @@ class CoreAssistant:
             # Add assistant's response to conversation
             self.conversation.add_message("assistant", answer)
             
-            # Record AI-powered feedback for prompt evolution with intelligence learning
-            conversation_context = {
-                'conversation_length': len(self.conversation.messages),
-                'recent_errors': self._count_recent_errors(),
-                'user_expertise': self._assess_user_expertise(),
-                'conversation_type': self._classify_conversation_type(user_input),
-                'task_complexity': 'complex' if len(user_input) > 100 else 'simple',
-                'used_web_search': bool(search_results)
-            }
-            quality_assessment = self._assess_response_quality_ai(answer, user_input, conversation_context)
-            self.prompt_builder.record_response_feedback(
-                self.prompt_builder.current_prompt_metadata, 
-                quality_assessment,
-                user_feedback=None,  # Will be provided later if user gives explicit feedback
-                user_input=user_input,
-                ai_response=answer
-            )
+            # DISABLED: AI-powered feedback (too slow for now)
+            # conversation_context = {
+            #     'conversation_length': len(self.conversation.messages),
+            #     'recent_errors': self._count_recent_errors(),
+            #     'user_expertise': self._assess_user_expertise(),
+            #     'conversation_type': self._classify_conversation_type(user_input),
+            #     'task_complexity': 'complex' if len(user_input) > 100 else 'simple',
+            #     'used_web_search': bool(search_results)
+            # }
+            # quality_assessment = self._assess_response_quality_ai(answer, user_input, conversation_context)
+            # self.prompt_builder.record_response_feedback(
+            #     self.prompt_builder.current_prompt_metadata, 
+            #     quality_assessment,
+            #     user_feedback=None,
+            #     user_input=user_input,
+            #     ai_response=answer
+            # )
             
             debug_info("Generated response", {
                 "response_length": len(answer),
-                "ai_quality_score": quality_assessment.get("overall_score"),
-                "ai_assessment_issues": quality_assessment.get("issues", []),
                 "used_web_search": bool(search_results)
             })
             
-            # Maybe save to memory
-            self.maybe_save_memory(user_input, answer)
+            # SIMPLIFIED MEMORY SAVING: Just save if it looks important  
+            try:
+                # Simple heuristic: save if user shares personal info or asks about memory
+                user_lower = user_input.lower()
+                should_save = any(phrase in user_lower for phrase in [
+                    "my", "i am", "i work", "i live", "i like", "i prefer", "remember that"
+                ])
+                
+                if should_save:
+                    memory_id = self.memory_db.save_memory(
+                        question=user_input,
+                        answer=answer,
+                        agent='core_assistant',
+                        importance='medium',
+                        tags=['auto_saved']
+                    )
+                    if memory_id:
+                        debug_success("Memory auto-saved", {"memory_id": memory_id})
+                        
+            except Exception as e:
+                debug_error("Memory saving failed", e)
             
             return answer
             
         except Exception as e:
             debug_error("Failed to process input", e)
+            import traceback
+            print("FULL ERROR:", traceback.format_exc())
             return "I apologize, but I encountered an error processing your request."
+
+    def _build_light_context(self, user_input: str, agent: str) -> list:
+        """Build context with light memory retrieval (5-10 memories)."""
+        try:
+            # Light memory retrieval
+            memories = self.memory_db.get_all_memories(limit=5)
+            memory_context = ""
+            
+            if memories:
+                # SIMPLIFIED: Just concatenate memories without compression
+                memory_parts = []
+                for memory in memories[:10]:  # Limit to 10 memories
+                    question = memory.get('question', '')
+                    answer = memory.get('answer', '')
+                    if question and answer:
+                        memory_parts.append(f"Q: {question}\nA: {answer}")
+                memory_context = "\n\n".join(memory_parts)
+            
+            # Short conversation history
+            short_term = ""
+            for msg in self.conversation.messages[-3:]:
+                if msg["role"] in ("user", "assistant"):
+                    short_term += f"{msg['role'].capitalize()}: {msg['content']}\n"
+            
+            system_prompt = self.prompt_builder.build_system_prompt(
+                short_term, memory_context, self._build_conversation_context(user_input, memories)
+            )
+            
+            self._add_context_to_conversation(system_prompt, user_input)
+            return self.conversation.get_context()
+            
+        except Exception as e:
+            debug_error("Light context building failed", e)
+            return self._build_simple_context(user_input)
+    
+    def _build_moderate_context(self, user_input: str, agent: str) -> list:
+        """Build context with moderate memory retrieval (10-20 memories)."""
+        try:
+            # Moderate memory retrieval
+            memories = self.memory_db.get_all_memories(limit=10)
+            semantic_memories = []
+            
+            try:
+                semantic_memories = self.memory_db.query_memories(
+                    query=user_input, limit=5, agent=agent
+                )
+            except:
+                pass
+            
+            # Combine and deduplicate
+            all_memories = list({m.get('id', m.get('_id')): m for m in memories + semantic_memories}.values())
+            memory_context = ""
+            
+            if all_memories:
+                # SIMPLIFIED: Just concatenate memories without compression
+                memory_parts = []
+                for memory in all_memories[:15]:  # Limit to 15 memories
+                    question = memory.get('question', '')
+                    answer = memory.get('answer', '')
+                    if question and answer:
+                        memory_parts.append(f"Q: {question}\nA: {answer}")
+                memory_context = "\n\n".join(memory_parts)
+            
+            # Medium conversation history
+            short_term = ""
+            for msg in self.conversation.messages[-5:]:
+                if msg["role"] in ("user", "assistant"):
+                    short_term += f"{msg['role'].capitalize()}: {msg['content']}\n"
+            
+            system_prompt = self.prompt_builder.build_system_prompt(
+                short_term, memory_context, self._build_conversation_context(user_input, all_memories)
+            )
+            
+            self._add_context_to_conversation(system_prompt, user_input)
+            return self.conversation.get_context()
+            
+        except Exception as e:
+            debug_error("Moderate context building failed", e)
+            return self._build_simple_context(user_input)
+    
+    def _build_full_context(self, user_input: str, agent: str) -> list:
+        """Build context with full memory retrieval (SIMPLIFIED - no more neural nonsense)."""
+        try:
+            # SIMPLIFIED: Just get recent memories and use dynamic context
+            return self._build_dynamic_context(user_input, agent, self._create_simple_memory_plan(user_input, "full"))
+            
+        except Exception as e:
+            debug_error("Full context building failed", e)
+            return self._build_moderate_context(user_input, agent)
+    
+    def _build_conversation_context(self, user_input: str, memories: list) -> dict:
+        """Build conversation context dictionary."""
+        return {
+            'conversation_length': len(self.conversation.messages),
+            'recent_errors': self._count_recent_errors(),
+            'user_expertise': self._assess_user_expertise(),
+            'conversation_type': self._classify_conversation_type(user_input),
+            'task_complexity': 'complex' if len(user_input) > 100 else 'simple',
+            'current_query': user_input,
+            'conversation_history': [{"content": msg["content"], "role": msg["role"]} 
+                                   for msg in self.conversation.messages[-10:]],
+            'memories': memories,
+            'max_tokens': 4000
+        }
+    
+    def _add_context_to_conversation(self, system_prompt: str, user_input: str):
+        """Add system prompt and user input to conversation."""
+        # Add system message to conversation
+        if not self.conversation.messages or self.conversation.messages[0]["role"] != "system":
+            self.conversation.add_message("system", system_prompt)
+        else:
+            self.conversation.messages[0]["content"] = system_prompt
+        
+        # Add user message
+        self.conversation.add_message("user", user_input)
+    
+    def _get_database_stats(self) -> dict:
+        """Get current database statistics for dynamic memory scaling."""
+        try:
+            # Get total memory count
+            total_memories = len(self.memory_db.get_all_memories(limit=10000)) if self.memory_db else 0
+            
+            # Calculate recent activity (memories from last 24 hours)
+            recent_activity = 0
+            try:
+                from datetime import datetime, timedelta
+                yesterday = datetime.now() - timedelta(days=1)
+                recent_memories = self.memory_db.get_all_memories(limit=100) if self.memory_db else []
+                for memory in recent_memories:
+                    if memory.get('timestamp'):
+                        # Parse timestamp and check if recent
+                        # This is a rough estimate - adjust based on your timestamp format
+                        recent_activity += 1
+            except:
+                recent_activity = min(10, total_memories // 10)  # Fallback estimate
+            
+            return {
+                'total_memories': total_memories,
+                'recent_activity': recent_activity,
+                'avg_memory_size': 150,  # Rough estimate
+                'database_type': 'mongodb'
+            }
+        except Exception as e:
+            debug_error("Failed to get database stats", e)
+            return {
+                'total_memories': 50,
+                'recent_activity': 5,
+                'avg_memory_size': 100,
+                'database_type': 'unknown'
+            }
+    
+    def _build_dynamic_context(self, user_input: str, agent: str, memory_plan) -> list:
+        """Build context using the dynamic memory plan."""
+        try:
+            # If no memory needed, return simple context
+            if memory_plan.recent_memories == 0 and memory_plan.semantic_memories == 0:
+                return self._build_simple_context(user_input)
+            
+            # Fetch memories according to the plan
+            all_memories = []
+            
+            # PRIORITIZE DIVERSE MEMORIES: Skip recent, focus on variety
+            if memory_plan.recent_memories > 0:
+                # Instead of recent memories, get diverse topic-based memories
+                diverse_queries = ['tech preferences', 'hobbies', 'work', 'location', 'food preferences', 'personality traits']
+                
+                unique_memories = []
+                seen_answers = set()
+                
+                for query in diverse_queries:
+                    if len(unique_memories) >= memory_plan.recent_memories:
+                        break
+                        
+                    topic_memories = self.memory_db.query_memories(query, limit=3)
+                    for memory in topic_memories:
+                        answer_signature = memory.get('answer', '')[:100].lower().strip()
+                        
+                        if answer_signature not in seen_answers and len(unique_memories) < memory_plan.recent_memories:
+                            unique_memories.append(memory)
+                            seen_answers.add(answer_signature)
+                
+                # Fill remaining slots with actual recent memories if needed
+                if len(unique_memories) < memory_plan.recent_memories:
+                    recent_fill = self.memory_db.get_all_memories(limit=20)
+                    for memory in recent_fill:
+                        answer_signature = memory.get('answer', '')[:100].lower().strip()
+                        if answer_signature not in seen_answers and len(unique_memories) < memory_plan.recent_memories:
+                            unique_memories.append(memory)
+                            seen_answers.add(answer_signature)
+                
+                all_memories.extend(unique_memories)
+                debug_info(f"Diverse memories: {len(unique_memories)} from topic-based search")
+            
+            # Get semantic memories
+            if memory_plan.semantic_memories > 0:
+                try:
+                    semantic_memories = self.memory_db.query_memories(
+                        query=user_input, 
+                        limit=memory_plan.semantic_memories, 
+                        agent=agent
+                    )
+                    # Deduplicate by ID and content
+                    existing_ids = {m.get('id', m.get('_id')) for m in all_memories}
+                    existing_answers = {m.get('answer', '')[:100].lower().strip() for m in all_memories}
+                    
+                    for memory in semantic_memories:
+                        memory_id = memory.get('id', memory.get('_id'))
+                        answer_sig = memory.get('answer', '')[:100].lower().strip()
+                        
+                        if memory_id not in existing_ids and answer_sig not in existing_answers:
+                            all_memories.append(memory)
+                            existing_answers.add(answer_sig)
+                            
+                except Exception as e:
+                    debug_error("Semantic search failed", e)
+            
+            # Apply personal info search strategy for comprehensive personal queries
+            if "personal_info" in memory_plan.search_strategies:
+                try:
+                    # Search for different categories of personal information
+                    personal_categories = ["pets", "background", "interests", "preferences", "personality"]
+                    
+                    for category in personal_categories:
+                        if len(all_memories) >= memory_plan.max_total_memories:
+                            break
+                            
+                        category_results = self.memory_db.query_memories(
+                            query=category,
+                            limit=2,  # Get a few from each category
+                            agent=agent
+                        )
+                        
+                        # Add unique results with content deduplication
+                        existing_ids = {m.get('id', m.get('_id')) for m in all_memories}
+                        existing_answers = {m.get('answer', '')[:100].lower().strip() for m in all_memories}
+                        
+                        for memory in category_results:
+                            memory_id = memory.get('id', memory.get('_id'))
+                            answer_sig = memory.get('answer', '')[:100].lower().strip()
+                            
+                            if memory_id not in existing_ids and answer_sig not in existing_answers:
+                                all_memories.append(memory)
+                                existing_answers.add(answer_sig)
+                                
+                    debug_info(f"Personal info search added {len(all_memories) - len(recent_memories)} additional memories")
+                    
+                except Exception as e:
+                    debug_error("Personal info search failed", e)
+            
+            # Neural retrieval removed - over-engineered bullshit
+            
+            # Limit total memories
+            all_memories = all_memories[:memory_plan.max_total_memories]
+            
+            # Build memory context with simple concatenation
+            memory_context = ""
+            if all_memories:
+                memory_parts = []
+                for memory in all_memories[:20]:  # Limit to 20 memories
+                    question = memory.get('question', '')
+                    answer = memory.get('answer', '')
+                    if question and answer:
+                        memory_parts.append(f"Q: {question}\nA: {answer}")
+                memory_context = "\n\n".join(memory_parts)
+            
+            # Build conversation history according to plan
+            conversation_history_length = min(8, max(3, memory_plan.token_budget // 200))
+            short_term = ""
+            for msg in self.conversation.messages[-conversation_history_length:]:
+                if msg["role"] in ("user", "assistant"):
+                    short_term += f"{msg['role'].capitalize()}: {msg['content']}\n"
+            
+            # Build system prompt
+            conversation_context = self._build_conversation_context(user_input, all_memories)
+            system_prompt = self.prompt_builder.build_system_prompt(
+                short_term, memory_context, conversation_context
+            )
+            
+            # Add to conversation and return
+            self._add_context_to_conversation(system_prompt, user_input)
+            return self.conversation.get_context()
+            
+        except Exception as e:
+            debug_error("Dynamic context building failed", e)
+        # Fallback to moderate context
+        return self._build_moderate_context(user_input, agent)
+    
+    def _create_simple_memory_plan(self, user_input: str, memory_level: str):
+        """Create a simple memory plan without the complexity."""
+        from .dynamic_memory_engine import create_memory_plan
+        return create_memory_plan(
+            user_input=user_input,
+            memory_level=memory_level,
+            database_stats={'total_memories': 100}  # Simple default
+        )

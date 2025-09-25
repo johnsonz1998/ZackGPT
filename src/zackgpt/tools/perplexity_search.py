@@ -7,7 +7,7 @@ Better web search with AI-powered answers
 import os
 import requests
 from typing import List, Dict, Any
-from ..core.logger import debug_info, debug_error, debug_success
+from ..utils.logger import debug_info, debug_error, debug_success
 
 class PerplexitySearch:
     def __init__(self):

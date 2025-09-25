@@ -10,7 +10,7 @@ import json
 import uuid
 import asyncio
 import concurrent.futures
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 from pathlib import Path
 
@@ -22,7 +22,25 @@ from pydantic import BaseModel, Field
 
 from dotenv import load_dotenv
 from ..core.core_assistant import CoreAssistant
-from ..core.logger import debug_info, debug_success, debug_error
+from ..utils.logger import debug_info, debug_success, debug_error
+
+# Import performance toggle service and lightweight mode
+try:
+    from config.performance_toggles import should_enable, get_performance_config, performance_toggles
+    from config.lightweight_mode import enable_lightweight_mode, is_lightweight_mode
+    PERFORMANCE_TOGGLES_AVAILABLE = True
+    
+    # Auto-enable lightweight mode if requested
+    if os.getenv("ZACKGPT_LIGHTWEIGHT", "false").lower() == "true":
+        enable_lightweight_mode()
+        
+except ImportError:
+    print("⚠️ Performance toggles not available - using default settings")
+    PERFORMANCE_TOGGLES_AVAILABLE = False
+    def should_enable(feature: str) -> bool:
+        return feature in ["external_search", "perplexity_integration"]  # Safe defaults
+    def is_lightweight_mode() -> bool:
+        return False
 
 # Load environment variables
 load_dotenv()
@@ -34,8 +52,14 @@ os.environ["DEBUG_MODE"] = "True"
 #      THREAD POOL EXECUTOR
 # =============================
 
-# Create a thread pool executor for blocking operations
-thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=4)
+# Create a thread pool executor for blocking operations (resource-aware)
+max_workers = 1 if is_lightweight_mode() else int(os.getenv("THREAD_POOL_SIZE", "4"))
+thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=max_workers)
+
+if is_lightweight_mode():
+    print(f"⚡ Lightweight mode: Using single-threaded executor")
+else:
+    print(f"🔧 Using thread pool with {max_workers} workers")
 
 # =============================
 #         DATA MODELS
@@ -175,15 +199,45 @@ connection_manager = ConnectionManager()
 thread_manager = ThreadManager()
 memory_manager = MemoryManager()
 
-# Assistant instance per thread (for conversation continuity)
+# Assistant instance per thread (for conversation continuity) - with cleanup
 assistants: Dict[str, CoreAssistant] = {}
+assistant_last_used: Dict[str, datetime] = {}
 
 def get_assistant(thread_id: str) -> CoreAssistant:
     """Get or create an assistant instance for a specific thread."""
+    # Clean up old assistants first (older than 1 hour)
+    cleanup_old_assistants()
+    
     if thread_id not in assistants:
         assistants[thread_id] = CoreAssistant()
-        debug_info(f"Created new assistant instance for thread: {thread_id}")
+        debug_info(f"Created new assistant instance for thread: {thread_id}", {
+            "total_assistants": len(assistants)
+        })
+    
+    # Update last used time
+    assistant_last_used[thread_id] = datetime.now()
     return assistants[thread_id]
+
+def cleanup_old_assistants():
+    """Clean up assistant instances that haven't been used in over 1 hour."""
+    cutoff_time = datetime.now() - timedelta(hours=1)
+    threads_to_remove = []
+    
+    for thread_id, last_used in assistant_last_used.items():
+        if last_used < cutoff_time:
+            threads_to_remove.append(thread_id)
+    
+    for thread_id in threads_to_remove:
+        if thread_id in assistants:
+            del assistants[thread_id]
+        if thread_id in assistant_last_used:
+            del assistant_last_used[thread_id]
+        debug_info(f"Cleaned up inactive assistant for thread: {thread_id}")
+    
+    if threads_to_remove:
+        debug_info(f"Cleaned up {len(threads_to_remove)} inactive assistants", {
+            "remaining_assistants": len(assistants)
+        })
 
 # =============================
 #         REST ENDPOINTS
@@ -290,14 +344,14 @@ async def send_message(thread_id: str, request: SendMessageRequest):
                     loop.run_in_executor(
                         thread_pool, assistant.process_input, search_input
                     ),
-                    timeout=60.0  # 60 second timeout
+                    timeout=30.0  # 30 second timeout to prevent hanging
                 )
             else:
                 ai_response = await asyncio.wait_for(
                     loop.run_in_executor(
                         thread_pool, assistant.process_input, request.content
                     ),
-                    timeout=60.0  # 60 second timeout
+                    timeout=30.0  # 30 second timeout to prevent hanging
                 )
         except asyncio.TimeoutError:
             debug_error("AI processing timeout", {"thread_id": thread_id, "content": request.content[:50]})
@@ -549,6 +603,55 @@ async def reset_config():
     # TODO: Implement actual config reset
     return await get_config()
 
+@app.get("/performance")
+async def get_performance_config():
+    """Get current performance toggle configuration."""
+    if not PERFORMANCE_TOGGLES_AVAILABLE:
+        return {"error": "Performance toggles not available", "mode": "unknown"}
+    
+    return performance_toggles.get_config_dict()
+
+@app.post("/performance/mode")
+async def set_performance_mode(data: Dict[str, str]):
+    """Set performance mode (development, staging, production, testing)."""
+    if not PERFORMANCE_TOGGLES_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Performance toggles not available")
+    
+    new_mode = data.get("mode", "").lower()
+    if new_mode not in ["development", "staging", "production", "testing"]:
+        raise HTTPException(status_code=400, detail="Invalid mode. Must be: development, staging, production, or testing")
+    
+    # Update environment variable and reload configuration
+    import os
+    os.environ["ZACKGPT_MODE"] = new_mode
+    
+    # Reload the performance toggles
+    from config.performance_toggles import reload_config
+    reload_config()
+    
+    return {
+        "success": True,
+        "message": f"Performance mode set to {new_mode}",
+        "config": performance_toggles.get_config_dict()
+    }
+
+@app.post("/performance/reload")
+async def reload_performance_config():
+    """Reload performance configuration from environment variables."""
+    if not PERFORMANCE_TOGGLES_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Performance toggles not available")
+    
+    try:
+        from config.performance_toggles import reload_config
+        reload_config()
+        return {
+            "success": True,
+            "message": "Performance configuration reloaded",
+            "config": performance_toggles.get_config_dict()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to reload configuration: {str(e)}")
+
 # =============================
 #      WEBSOCKET ENDPOINT
 # =============================
@@ -621,14 +724,14 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                                 loop.run_in_executor(
                                     thread_pool, assistant.process_input, search_input
                                 ),
-                                timeout=60.0  # 60 second timeout
+                                timeout=30.0  # 30 second timeout to prevent hanging
                             )
                         else:
                             ai_response = await asyncio.wait_for(
                                 loop.run_in_executor(
                                     thread_pool, assistant.process_input, content
                                 ),
-                                timeout=60.0  # 60 second timeout
+                                timeout=30.0  # 30 second timeout to prevent hanging
                             )
                     except asyncio.TimeoutError:
                         debug_error("AI processing timeout", {"thread_id": thread_id, "content": content[:50]})
@@ -651,8 +754,8 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                     # Add assistant message to database
                     assistant_message = thread_manager.add_assistant_message(thread_id, ai_response)
                     
-                    # Memory saving is handled inside assistant.process_input() to avoid duplicates
-                    memory_notification = None  # No longer sending memory notifications for every chat
+                    # Skip memory notifications for now (disabled for performance)
+                    memory_notifications = []
                     
                     # Send typing indicator off
                     await websocket.send_text(json.dumps({
@@ -672,11 +775,11 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                         }
                     }))
                     
-                    # Send memory notification if memory was created
-                    if memory_notification:
+                    # Send memory notifications if any were created
+                    for notification in memory_notifications:
                         await websocket.send_text(json.dumps({
                             "type": "memory_notification",
-                            "data": memory_notification
+                            "data": notification
                         }))
                     
                 except Exception as e:
@@ -714,15 +817,77 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
 @app.on_event("startup")
 async def startup_event():
     """Initialize the application on startup."""
-    debug_success("ZackGPT Web API started", {
-        "port": "8000",
-        "cors_origins": [
-            "http://localhost:3000", "http://127.0.0.1:3000",
-            "http://localhost:4200", "http://127.0.0.1:4200",
-            "http://localhost:8000", "http://127.0.0.1:8000"
-        ],
-        "websocket_enabled": True
-    })
+    try:
+        # Log performance configuration
+        if PERFORMANCE_TOGGLES_AVAILABLE:
+            print(f"🔧 ZackGPT Performance Mode: {performance_toggles.mode.upper()}")
+        
+        # Conditionally start background tasks based on toggles
+        if should_enable("periodic_cleanup"):
+            print("🧹 Starting periodic cleanup task...")
+            asyncio.create_task(periodic_cleanup())
+        else:
+            print("❌ Periodic cleanup disabled (performance mode)")
+        
+        # Try debug logging (might fail if MongoDB analytics is unavailable)
+        if should_enable("debug_analytics"):
+            debug_success("ZackGPT Web API started", {
+                "port": "8000",
+                "performance_mode": performance_toggles.mode if PERFORMANCE_TOGGLES_AVAILABLE else "unknown",
+                "cors_origins": [
+                    "http://localhost:3000", "http://127.0.0.1:3000",
+                    "http://localhost:4200", "http://127.0.0.1:4200",
+                    "http://localhost:8000", "http://127.0.0.1:8000"
+                ],
+                "websocket_enabled": True,
+                "background_tasks_enabled": should_enable("periodic_cleanup")
+            })
+        else:
+            print("✅ ZackGPT Web API started (analytics disabled)")
+            
+    except Exception as e:
+        print(f"⚠️ Debug logging failed during startup: {e}")
+        print("✅ ZackGPT Web API started (debug logging disabled)")
+
+async def periodic_cleanup():
+    """Periodically clean up old assistant instances to prevent memory leaks."""
+    if not should_enable("periodic_cleanup"):
+        print("🚫 Periodic cleanup task exiting - disabled by performance toggles")
+        return
+        
+    cleanup_interval = 300 if should_enable("detailed_metrics") else 900  # 5 min vs 15 min
+    print(f"🧹 Periodic cleanup running every {cleanup_interval//60} minutes")
+    
+    while True:
+        try:
+            # Check if cleanup is still enabled (in case toggles changed)
+            if not should_enable("periodic_cleanup"):
+                print("🚫 Periodic cleanup stopping - disabled by performance toggles")
+                break
+                
+            # Wait before cleanup
+            await asyncio.sleep(cleanup_interval)
+            
+            # Run cleanup in executor to avoid blocking the event loop
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, cleanup_old_assistants)
+            
+            # Log results based on performance settings
+            if should_enable("detailed_metrics"):
+                debug_info("Periodic cleanup completed", {
+                    "active_assistants": len(assistants),
+                    "next_cleanup_in": f"{cleanup_interval//60} minutes"
+                })
+            else:
+                print(f"🧹 Cleanup completed - {len(assistants)} active assistants")
+            
+        except Exception as e:
+            if should_enable("debug_analytics"):
+                debug_error("Error in periodic cleanup", e)
+            else:
+                print(f"⚠️ Cleanup failed: {e}")
+            # Wait a bit before retrying to avoid rapid failure loops
+            await asyncio.sleep(60)
 
 @app.on_event("shutdown")
 async def shutdown_event():

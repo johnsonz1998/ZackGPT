@@ -8,7 +8,7 @@ __author__ = "ZackGPT Team"
 
 # Core imports for easy access
 from .core.core_assistant import CoreAssistant
-from .core.logger import debug_info, debug_success, debug_error, debug_log
+from .utils.logger import debug_info, debug_success, debug_error, debug_log
 
 __all__ = [
     'CoreAssistant',

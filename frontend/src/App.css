@@ -245,7 +245,7 @@ body {
 }
 
 .welcome-content .input-container {
-  max-width: min(90vw, 800px);
+  max-width: min(90vw, 960px);
   width: 100%;
   padding: 20px 24px;
   min-height: 60px;
@@ -399,7 +399,7 @@ body {
   padding: 20px;
   display: flex;
   flex-direction: column;
-  max-width: 768px;
+  max-width: 920px;
   margin: 0 auto;
   width: 100%;
 }
@@ -536,7 +536,7 @@ body {
 }
 
 .input-container {
-  max-width: min(80vw, 600px);
+  max-width: min(85vw, 720px);
   margin: 0 auto;
   position: relative;
   display: flex;
@@ -648,22 +648,202 @@ body {
   margin-top: 16px;
 }
 
-/* Scrollbar Styles */
+/* Modern Floating Scrollbar Styles */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 14px;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-track {
-  background: #171717;
+  background: transparent;
+  margin: 8px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #565869;
-  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+  transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  opacity: 0;
+  animation: scrollbar-fade-in 0.3s ease-out 0.5s forwards;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #6b6b7f;
+  background: rgba(255, 255, 255, 0.25);
+  border: 2px solid transparent;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  transform: scaleY(1.1);
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: rgba(255, 255, 255, 0.35);
+  border: 1px solid transparent;
+  transform: scaleY(1.2);
+}
+
+/* Floating scrollbar container animations */
+@keyframes scrollbar-fade-in {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes scrollbar-fade-out {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+}
+
+/* Auto-hide scrollbar behavior */
+.auto-hide-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 0.3s ease;
+}
+
+.auto-hide-scrollbar:hover {
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.auto-hide-scrollbar::-webkit-scrollbar-thumb {
+  animation: scrollbar-fade-out 0.3s ease-out 2s forwards;
+}
+
+.auto-hide-scrollbar:hover::-webkit-scrollbar-thumb,
+.auto-hide-scrollbar:focus-within::-webkit-scrollbar-thumb {
+  animation: scrollbar-fade-in 0.2s ease-out forwards;
+}
+
+/* Enhanced scrollbar for main content areas */
+.messages-container::-webkit-scrollbar {
+  width: 12px;
+  background: transparent;
+}
+
+.messages-container::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 12px 0;
+  border-radius: 10px;
+}
+
+.messages-container::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(16, 163, 127, 0.2), rgba(16, 163, 127, 0.15));
+  border-radius: 10px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+  transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  box-shadow: 
+    0 2px 8px rgba(16, 163, 127, 0.1),
+    0 1px 3px rgba(0, 0, 0, 0.2);
+  opacity: 0;
+  animation: scrollbar-fade-in 0.3s ease-out 1s forwards;
+}
+
+.messages-container:hover::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(16, 163, 127, 0.35), rgba(16, 163, 127, 0.25));
+  border: 2px solid transparent;
+  box-shadow: 
+    0 4px 16px rgba(16, 163, 127, 0.2),
+    0 2px 6px rgba(0, 0, 0, 0.3);
+  transform: scaleY(1.05);
+  animation: scrollbar-fade-in 0.2s ease-out forwards;
+}
+
+.messages-container::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(16, 163, 127, 0.45), rgba(16, 163, 127, 0.35));
+  transform: scaleY(1.15);
+  box-shadow: 
+    0 6px 20px rgba(16, 163, 127, 0.25),
+    0 3px 8px rgba(0, 0, 0, 0.4);
+}
+
+/* Sidebar thread list scrollbar */
+.thread-list::-webkit-scrollbar {
+  width: 10px;
+  background: transparent;
+}
+
+.thread-list::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 8px 0;
+  border-radius: 8px;
+}
+
+.thread-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+  transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  opacity: 0;
+  animation: scrollbar-fade-in 0.3s ease-out 0.8s forwards;
+}
+
+.thread-list:hover::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid transparent;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  animation: scrollbar-fade-in 0.2s ease-out forwards;
+}
+
+.thread-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.28);
+  transform: scaleY(1.1);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4);
+}
+
+/* Memory expanded content scrollbar */
+.memory-expanded-content::-webkit-scrollbar {
+  width: 8px;
+  background: transparent;
+}
+
+.memory-expanded-content::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 6px 0;
+  border-radius: 6px;
+}
+
+.memory-expanded-content::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background-clip: content-box;
+  transition: all 0.3s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.memory-expanded-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: scaleY(1.1);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+/* Firefox scrollbar support */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.messages-container {
+  scrollbar-color: rgba(16, 163, 127, 0.2) transparent;
+}
+
+.thread-list {
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
 }
 
 /* Responsive Design */
@@ -701,15 +881,19 @@ body {
   .chat-input {
     padding: 16px;
   }
-}
 
-/* Hide scrollbar for webkit browsers */
-.messages-container::-webkit-scrollbar {
-  width: 6px;
-}
-
-.thread-list::-webkit-scrollbar {
-  width: 6px;
+  /* Mobile scrollbar adjustments */
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
+  
+  .messages-container::-webkit-scrollbar {
+    width: 6px;
+  }
+  
+  .thread-list::-webkit-scrollbar {
+    width: 6px;
+  }
 }
 
 /* Focus styles for accessibility */

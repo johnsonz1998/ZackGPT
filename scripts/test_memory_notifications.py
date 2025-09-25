@@ -17,7 +17,7 @@ try:
 except ImportError:
     # Fallback to direct imports
     from zackgpt.core.memory_manager import PersistentMemoryManager
-    from zackgpt.core.logger import debug_success, debug_info, debug_error
+    from zackgpt.utils.logger import debug_success, debug_info, debug_error
 
 def test_memory_notifications():
     """Test the memory notification system"""

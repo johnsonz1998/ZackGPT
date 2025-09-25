@@ -299,7 +299,11 @@ function App() {
         setThreads(prev => [thread, ...prev]);
         setSelectedThread(thread);
         setMessages([]);
+        // Switch to chat view when creating a new thread
+        setCurrentView('chat');
         return thread;
+      } else {
+        console.error('Failed to create thread:', response.status, response.statusText);
       }
     } catch (error) {
       console.error('Failed to create thread:', error);
@@ -440,7 +444,7 @@ function App() {
           </button>
         </div>
 
-        <div className="thread-list">
+        <div className="thread-list auto-hide-scrollbar">
           {threads.map(thread => (
             <div
               key={thread.id}
@@ -581,7 +585,7 @@ function App() {
         ) : (
           /* Chat Interface */
           <div className="chat-interface">
-            <div className="messages-container">
+            <div className="messages-container auto-hide-scrollbar">
               {messages.map(message => (
                 <div key={message.id} className={`message ${message.role}`}>
                   <div className="message-content">

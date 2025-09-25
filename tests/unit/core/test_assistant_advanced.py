@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../src')))
 
 from zackgpt.core.core_assistant import CoreAssistant
-from zackgpt.core.logger import debug_log, debug_success
+from zackgpt.utils.logger import debug_log, debug_success
 
 
 class TestPromptEvolution:

@@ -5,7 +5,7 @@ Core AI logic and prompt management
 
 from .core_assistant import CoreAssistant
 # Lazy imports - don't load heavy modules during import
-# from .logger import debug_info, debug_success, debug_error, debug_log  # Import when needed
+# from ..utils.logger import debug_info, debug_success, debug_error, debug_log  # Import when needed
 # from .prompt_builder import EvolutionaryPromptBuilder  # Import when needed
 # from .query_utils import ask_gpt  # Import when needed
 

@@ -136,7 +136,7 @@ def test_log_learning_events(log_aggregator, monkeypatch):
     monkeypatch.setenv("LOG_AGGREGATION_ENABLED", "true")
     
     # Mock the global log aggregator to use our test instance
-    from src.zackgpt.core import logger
+    from src.zackgpt.utils import logger
     original_aggregator = logger._log_aggregator
     logger._log_aggregator = log_aggregator
     

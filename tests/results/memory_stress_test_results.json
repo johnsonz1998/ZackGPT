@@ -1,0 +1,29 @@
+{
+  "summary": {
+    "total_tests": 9,
+    "passed": 9,
+    "failed": 0,
+    "success_rate": 100.0,
+    "total_time": 204.70602941513062,
+    "total_memories_created": 84
+  },
+  "detailed_results": [
+    {
+      "test_name": "Dense Personal Info",
+      "input_text": "Alex Thompson, 28, Google engineer, SF, Python, guitar",
+      "expected_memories": 5,
+      "actual_memories": 5,
+      "success": true,
+      "memory_details": [
+        {
+          "_id": "9b9553b9-c0c5-4283-b9bc-eb1b66a55d30",
+          "question": "What is your name and age?",
+          "answer": "Alex Thompson, 28 years old",
+          "agent": "core_assistant",
+          "importance": "high",
+          "tags": [
+            "personal_identifier",
+            "age"
+          ],
+          "embedding": [],
+          "timestamp": 

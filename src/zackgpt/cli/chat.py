@@ -9,7 +9,7 @@ import sys
 
 from dotenv import load_dotenv
 from ..core.core_assistant import CoreAssistant
-from ..core.logger import debug_info, debug_success
+from ..utils.logger import debug_info, debug_success
 from .output import print_success, print_error, print_info, print_banner
 
 def run_text_mode():

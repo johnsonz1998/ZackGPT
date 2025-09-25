@@ -9,7 +9,7 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime
 import json
 
-from ..core.logger import (
+from ..utils.logger import (
     debug_log, debug_error, debug_success, debug_info,
     log_learning_event, log_component_performance_update,
     log_performance_metric

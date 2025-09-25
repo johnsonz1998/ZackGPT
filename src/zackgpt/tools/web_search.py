@@ -15,7 +15,7 @@ from config.config import (
     WEB_SEARCH_ENABLED, SERPAPI_KEY, GOOGLE_API_KEY, GOOGLE_CSE_ID,
     WEB_SEARCH_MAX_RESULTS, WEB_SEARCH_TIMEOUT, USER_AGENT, DEBUG_MODE
 )
-from ..core.logger import debug_info, debug_error, debug_warning
+from ..utils.logger import debug_info, debug_error, debug_warning
 
 
 class WebSearchError(Exception):
